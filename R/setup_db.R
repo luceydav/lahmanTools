@@ -100,15 +100,52 @@ setup_baseball_db <- function(dbdir         = NULL,
   # -- SalariesAll view: union all three salary sources -------------------------
   # Only build the view if at least one supplemental source loaded
   if (has_spotrac || has_usatoday) {
-    usatoday_cte <- if (has_usatoday) "
+    # Normalise USA Today full-name team strings to Lahman 3-letter teamIDs.
+    usa_team_case <- "
+          CASE team
+            WHEN 'Angels'            THEN 'LAA'  WHEN 'L.A. Angels'       THEN 'LAA'
+            WHEN 'Arizona'           THEN 'ARI'  WHEN 'Diamondbacks'      THEN 'ARI'
+            WHEN 'Astros'            THEN 'HOU'  WHEN 'Houston'           THEN 'HOU'
+            WHEN 'Athletics'         THEN 'OAK'  WHEN 'Oakland'           THEN 'OAK'
+            WHEN 'Atlanta'           THEN 'ATL'  WHEN 'Braves'            THEN 'ATL'
+            WHEN 'Baltimore'         THEN 'BAL'  WHEN 'Orioles'           THEN 'BAL'
+            WHEN 'Blue Jays'         THEN 'TOR'  WHEN 'Toronto'           THEN 'TOR'
+            WHEN 'Boston'            THEN 'BOS'  WHEN 'Red Sox'           THEN 'BOS'
+            WHEN 'Brewers'           THEN 'MIL'  WHEN 'Milwaukee'         THEN 'MIL'
+            WHEN 'Cardinals'         THEN 'SLN'  WHEN 'St. Louis'         THEN 'SLN'
+            WHEN 'Chi. Cubs'         THEN 'CHN'  WHEN 'Chicago Cubs'      THEN 'CHN'
+            WHEN 'Cubs'              THEN 'CHN'
+            WHEN 'Chic. White Sox'   THEN 'CHA'  WHEN 'Chicago White Sox' THEN 'CHA'
+            WHEN 'White Sox'         THEN 'CHA'
+            WHEN 'Cincinnati'        THEN 'CIN'  WHEN 'Reds'              THEN 'CIN'
+            WHEN 'Cleveland'         THEN 'CLE'  WHEN 'Guardians'         THEN 'CLE'
+            WHEN 'Colorado'          THEN 'COL'  WHEN 'Rockies'           THEN 'COL'
+            WHEN 'Detroit'           THEN 'DET'  WHEN 'Tigers'            THEN 'DET'
+            WHEN 'Dodgers'           THEN 'LAN'  WHEN 'L.A. Dodgers'      THEN 'LAN'
+            WHEN 'Giants'            THEN 'SFN'  WHEN 'San Francisco'     THEN 'SFN'
+            WHEN 'Kansas City'       THEN 'KCA'  WHEN 'Royals'            THEN 'KCA'
+            WHEN 'Mariners'          THEN 'SEA'  WHEN 'Seattle'           THEN 'SEA'
+            WHEN 'Marlins'           THEN 'MIA'  WHEN 'Miami'             THEN 'MIA'
+            WHEN 'Mets'              THEN 'NYN'  WHEN 'N.Y. Mets'         THEN 'NYN'
+            WHEN 'Minnesota'         THEN 'MIN'  WHEN 'Twins'             THEN 'MIN'
+            WHEN 'Nationals'         THEN 'WAS'  WHEN 'Washington'        THEN 'WAS'
+            WHEN 'N.Y. Yankees'      THEN 'NYA'  WHEN 'Yankees'           THEN 'NYA'
+            WHEN 'Philadelphia'      THEN 'PHI'  WHEN 'Phillies'          THEN 'PHI'
+            WHEN 'Pittsburgh'        THEN 'PIT'  WHEN 'Pirates'           THEN 'PIT'
+            WHEN 'Rangers'           THEN 'TEX'  WHEN 'Texas'             THEN 'TEX'
+            WHEN 'Rays'              THEN 'TBA'  WHEN 'Tampa Bay'         THEN 'TBA'
+            WHEN 'San Diego'         THEN 'SDN'  WHEN 'Padres'            THEN 'SDN'
+            ELSE team
+          END"
+
+    usatoday_cte <- if (has_usatoday) paste0("
       -- Parse each USA Today row: clean AAV and extract contract start/end year.
       -- Handles patterns: 'N (YYYY-YY)', 'NN (YYYY-YY)', 'N(YYYY-YY)'.
       -- Rows with NULL years (1-year deals) get NULL c_start/c_end and pass
       -- through as actual records via the FULL JOIN below.
       usa_parsed AS (
         SELECT
-          playerID,
-          team                                                              AS teamID,
+          playerID,", usa_team_case, "                                        AS teamID,
           salary::DOUBLE                                                    AS salary,
           yearID,
           average_annual::DOUBLE                                            AS aav,
@@ -157,7 +194,7 @@ setup_baseball_db <- function(dbdir         = NULL,
         FULL JOIN actual a
           ON cy.playerID = a.playerID AND cy.yearID = a.yearID
         ORDER BY playerID, yearID, is_actual DESC
-      )" else ""
+      )") else ""
 
     usatoday_union <- if (has_usatoday) "
       UNION ALL
@@ -168,15 +205,26 @@ setup_baseball_db <- function(dbdir         = NULL,
              is_actual
       FROM   usa_expanded" else ""
 
-    spotrac_union <- if (has_spotrac) "
+    # Normalise Spotrac abbreviations that differ from Lahman teamIDs.
+    spotrac_team_case <- "
+          CASE team
+            WHEN 'CHC' THEN 'CHN'  WHEN 'CHW' THEN 'CHA'
+            WHEN 'KC'  THEN 'KCA'  WHEN 'LAD' THEN 'LAN'
+            WHEN 'NYM' THEN 'NYN'  WHEN 'NYY' THEN 'NYA'
+            WHEN 'SD'  THEN 'SDN'  WHEN 'SF'  THEN 'SFN'
+            WHEN 'STL' THEN 'SLN'  WHEN 'TB'  THEN 'TBA'
+            WHEN 'WSH' THEN 'WAS'
+            ELSE team
+          END"
+
+    spotrac_union <- if (has_spotrac) paste0("
       UNION ALL
       -- Spotrac: actual player salaries 2017-2021, filtered to MLB-contract players
       -- (salary >= MLB minimum for that year) for consistency with Lahman.
       -- Minor leaguers on 40-man rosters are excluded.
       -- MLB minimums: 2017=$535K, 2018=$545K, 2019=$555K, 2020=$208K(prorated 60g), 2021=$570.5K
       SELECT playerID::VARCHAR,
-             yearID::INTEGER,
-             team::VARCHAR    AS teamID,
+             yearID::INTEGER,", spotrac_team_case, "::VARCHAR  AS teamID,
              NULL::VARCHAR    AS lgID,
              salary::DOUBLE,
              'spotrac'        AS source,
@@ -190,7 +238,7 @@ setup_baseball_db <- function(dbdir         = NULL,
                WHEN 2020 THEN 208000
                WHEN 2021 THEN 570500
                ELSE 500000
-             END" else ""
+             END") else ""
 
     # Comma after last CTE only if usa CTEs are present
     cte_comma <- if (has_usatoday) "," else ""
