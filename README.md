@@ -8,6 +8,26 @@
 
 The design choice matters at scale: DuckDB executes columnar SQL directly on the file, so aggregations over 150 years of play-by-play data that would choke an in-memory data frame run in milliseconds.
 
+## Data model
+
+20 Lahman tables loaded into DuckDB, colour-coded by functional group.
+Arrows show primary-key → foreign-key relationships.
+
+![lahmanTools schema](man/figures/lahmanTools_schema.svg)
+
+| Colour | Group | Tables |
+|--------|-------|--------|
+| 🔵 Blue | Identity spine | `People`, `Teams`, `TeamsFranchises` |
+| 🟢 Green | Regular-season | `Batting`, `Pitching`, `Fielding`, `Appearances` |
+| 🟣 Purple | Postseason | `BattingPost`, `PitchingPost`, `FieldingPost` |
+| 🩷 Pink | Salary | `Salaries` |
+| 🟠 Orange | Honours | `AwardsPlayers`, `AllstarFull`, `HallOfFame` |
+| 🩵 Teal | Management | `Managers` |
+| 🤎 Brown | College | `CollegePlaying`, `Schools` |
+| ⚫ Grey | Lookups | `Parks`, `HomeGames`, `SeriesPost` |
+
+To regenerate after schema changes: `Rscript analysis/schema_dm.R` (requires `dm`, `DiagrammeR`, `DiagrammeRsvg`).
+
 ## Requirements
 
 - R ≥ 4.1.0
@@ -125,26 +145,6 @@ db_query(con, "
 | `FieldingStats` | `Fielding` | FPCT, RF/9, RF/G by position |
 | `SalariesAll` | `Salaries`, `SalariesUSAToday` | Lahman (≤ 2016) + USA Today (2017+); AAV imputation for multi-year contracts |
 | `TeamPayroll` | `SalariesAll` | Total and per-position payroll by team-season |
-
-## Data model
-
-20 Lahman tables loaded into DuckDB, colour-coded by functional group.
-Arrows show primary-key → foreign-key relationships.
-
-![lahmanTools schema](man/figures/lahmanTools_schema.svg)
-
-| Colour | Group | Tables |
-|--------|-------|--------|
-| 🔵 Blue | Identity spine | `People`, `Teams`, `TeamsFranchises` |
-| 🟢 Green | Regular-season | `Batting`, `Pitching`, `Fielding`, `Appearances` |
-| 🟣 Purple | Postseason | `BattingPost`, `PitchingPost`, `FieldingPost` |
-| 🩷 Pink | Salary | `Salaries` |
-| 🟠 Orange | Honours | `AwardsPlayers`, `AllstarFull`, `HallOfFame` |
-| 🩵 Teal | Management | `Managers` |
-| 🤎 Brown | College | `CollegePlaying`, `Schools` |
-| ⚫ Grey | Lookups | `Parks`, `HomeGames`, `SeriesPost` |
-
-To regenerate after schema changes: `Rscript analysis/schema_dm.R` (requires `dm`, `DiagrammeR`, `DiagrammeRsvg`).
 
 ## Package structure
 
