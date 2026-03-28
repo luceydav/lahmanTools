@@ -1,0 +1,28 @@
+# R session artifacts
+.Rhistory
+.Rapp.history
+.RData
+.Ruserdata
+.Rproj.user/
+
+# Package build outputs
+/*.tar.gz
+/*.zip
+
+# DuckDB files (data lives in ~/Documents/Data/baseball/, not in the repo)
+*.duckdb
+*.duckdb.wal
+
+# Scraped salary data (USA Today copyright — not for redistribution)
+mlb_salaries/
+inst/extdata/mlb_salaries/
+
+# R notebook outputs
+*.nb.html
+
+# Project notes / scratch files
+project_notes
+Salaries.csv
+
+# Test artifacts
+tests/testthat/_snaps/

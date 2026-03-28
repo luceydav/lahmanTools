@@ -1,0 +1,10 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^baseball\.duckdb$
+^baseball\.duckdb\.wal$
+^data-raw$
+^\.github$
+^.*\.nb\.html$
+^project_notes$
+^mlb_salaries$
+^Salaries\.csv$

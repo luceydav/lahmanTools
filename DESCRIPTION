@@ -1,0 +1,27 @@
+Package: lahmanTools
+Title: Baseball Analytics with Lahman and DuckDB
+Version: 0.1.0
+Authors@R: person("David", "Lucey", role = c("aut", "cre"),
+                  email = "david@example.com")
+Description: Provides a persistent DuckDB database populated with all Lahman
+    baseball tables and supplemental MLB salary data scraped from USA Today
+    (2017+). Includes helpers to connect, rebuild, and extend the database.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Depends: R (>= 4.1.0)
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+Imports:
+    DBI,
+    duckdb,
+    data.table,
+    Lahman,
+    httr2,
+    rvest,
+    xml2
+Suggests:
+    dm,
+    re2,
+    ggplot2,
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
