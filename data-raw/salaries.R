@@ -1,5 +1,20 @@
+# LEGAL NOTICE ----------------------------------------------------------------
+# This script scrapes salary data from Spotrac (spotrac.com).
+# Spotrac's Terms of Service (https://www.spotrac.com/terms/) restrict
+# automated access and commercial use of their data.
+#
+# This file is provided for REFERENCE ONLY. Before running it, you are
+# responsible for:
+#   1. Reviewing Spotrac's current Terms of Service
+#   2. Determining whether your intended use is permitted
+#   3. Obtaining any necessary permission from Spotrac
+#
+# The scraped data (CSV output) must NOT be committed to version control
+# or redistributed. It is excluded via .gitignore.
+# -----------------------------------------------------------------------------
+
 library(rvest)
-library(dplyr)
+library(data.table)
 library(stringr)
 
 years <- c(2017:2022)
@@ -7,8 +22,9 @@ years <- c(2017:2022)
 for (year in years) {
   print(year)
   url <- paste0("https://www.spotrac.com/mlb/rankings/", year, "/salary/")
+  Sys.sleep(3 + runif(1, 0, 2))   # ~3-5 second polite delay between years
   html <- read_html(url)
-  
+
   players <- html %>%
     html_nodes(".player-name") %>%
     html_text() %>%

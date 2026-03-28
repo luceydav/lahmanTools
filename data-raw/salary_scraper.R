@@ -1,3 +1,22 @@
+# LEGAL NOTICE ----------------------------------------------------------------
+# This script scrapes salary data from USA Today's MLB salary database
+# (databases.usatoday.com). USA Today's Terms of Service restrict automated
+# access to their databases. Their data is proprietary and NOT freely
+# redistributable.
+#
+# This file is provided for REFERENCE ONLY. Before running it, you are
+# responsible for:
+#   1. Reviewing USA Today's current Terms of Service
+#   2. Determining whether your intended use is permitted
+#   3. Obtaining any necessary permission from USA Today
+#
+# The scraped data (CSV output) must NOT be committed to version control
+# or redistributed. It is excluded via .gitignore.
+#
+# Suggested alternatives: Baseball Reference, MLB's official Stats API
+# (statsapi.mlb.com), or licensed data vendors for commercial use.
+# -----------------------------------------------------------------------------
+
 library(rvest)
 library(httr2)
 library(data.table)
@@ -26,7 +45,7 @@ scrape_player <- function(slug, year, id) {
   resp <- tryCatch(
     request(url) |>
       req_headers(`User-Agent` = "Mozilla/5.0") |>
-      req_throttle(5) |>
+      req_throttle(1/3) |>   # max 1 request per 3 seconds — respectful of server
       req_perform(),
     error = function(e) NULL
   )

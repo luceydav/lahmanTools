@@ -90,6 +90,14 @@ R/
 | `FieldingStats` | `Fielding` | FPCT, RF/9, RF/G |
 | `SalariesAll` | `Salaries` + `SalariesUSAToday` | Union of Lahman (≤2016) + USA Today (2017+); imputes missing contract years from AAV |
 
+## Salary Scrapers
+
+`data-raw/` contains reference scripts for collecting MLB salary data from
+third-party sites. **Before running them, review the applicable Terms of
+Service** — see [`data-raw/README.md`](data-raw/README.md). Scraped data
+files are excluded from version control via `.gitignore` and must not be
+redistributed.
+
 ## License
 
 MIT © David Lucey
