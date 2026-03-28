@@ -35,3 +35,6 @@ tests/testthat/_snaps/
 
 # Old scratch notebooks (superseded by analysis/)
 inst/notebooks/
+
+# Personal analysis scripts (local only — not package code)
+analysis/
