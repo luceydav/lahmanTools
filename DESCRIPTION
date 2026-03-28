@@ -20,6 +20,7 @@ Imports:
     rvest,
     xml2
 Suggests:
+    connections,
     dm,
     re2,
     ggplot2,
