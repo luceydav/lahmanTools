@@ -4,7 +4,7 @@
 \alias{connect_baseball_db}
 \title{Open a connection to the baseball DuckDB database}
 \usage{
-connect_baseball_db(dbdir = NULL, read_only = TRUE)
+connect_baseball_db(dbdir = NULL, read_only = TRUE, connections_pane = FALSE)
 }
 \arguments{
 \item{dbdir}{Path to the \code{baseball.duckdb} file. Defaults to the value of
@@ -15,9 +15,18 @@ the \code{LAHMANS_DBDIR} environment variable if set, otherwise
 
 \item{read_only}{Open in read-only mode. Default \code{TRUE} for analysis;
 use \code{FALSE} only when rebuilding via \code{\link[=setup_baseball_db]{setup_baseball_db()}}.}
+
+\item{connections_pane}{If \code{TRUE}, registers the connection with the RStudio
+Connections pane via the \code{connections} package (must be installed). The
+returned object is still a standard \code{DBIConnection} and works identically
+with all DBI and \code{db_query()} calls; the only difference is that RStudio
+will display it in the Connections pane with a browse/disconnect button.
+Silently falls back to a plain \code{DBI::dbConnect()} when \code{connections} is
+not installed.}
 }
 \value{
-A \code{DBIConnection} object. Close with
+A \code{DBIConnection} object (or a \code{connections}-wrapped equivalent when
+\code{connections_pane = TRUE}). Close with
 \code{DBI::dbDisconnect(con, shutdown = TRUE)}.
 }
 \description{
@@ -25,7 +34,13 @@ Open a connection to the baseball DuckDB database
 }
 \examples{
 \dontrun{
+# Plain connection
 con <- connect_baseball_db()
+DBI::dbListTables(con)
+DBI::dbDisconnect(con, shutdown = TRUE)
+
+# Visible in RStudio Connections pane
+con <- connect_baseball_db(connections_pane = TRUE)
 DBI::dbListTables(con)
 DBI::dbDisconnect(con, shutdown = TRUE)
 }
