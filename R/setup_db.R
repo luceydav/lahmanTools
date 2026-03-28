@@ -170,7 +170,10 @@ setup_baseball_db <- function(dbdir         = NULL,
 
     spotrac_union <- if (has_spotrac) "
       UNION ALL
-      -- Spotrac: actual player salaries 2017-2021
+      -- Spotrac: actual player salaries 2017-2021, filtered to MLB-contract players
+      -- (salary >= MLB minimum for that year) for consistency with Lahman.
+      -- Minor leaguers on 40-man rosters are excluded.
+      -- MLB minimums: 2017=$535K, 2018=$545K, 2019=$555K, 2020=$208K(prorated 60g), 2021=$570.5K
       SELECT playerID::VARCHAR,
              yearID::INTEGER,
              team::VARCHAR    AS teamID,
@@ -179,7 +182,15 @@ setup_baseball_db <- function(dbdir         = NULL,
              'spotrac'        AS source,
              TRUE             AS is_actual
       FROM   SalariesSpotrac
-      WHERE  playerID IS NOT NULL" else ""
+      WHERE  playerID IS NOT NULL
+        AND  salary >= CASE yearID
+               WHEN 2017 THEN 535000
+               WHEN 2018 THEN 545000
+               WHEN 2019 THEN 555000
+               WHEN 2020 THEN 208000
+               WHEN 2021 THEN 570500
+               ELSE 500000
+             END" else ""
 
     # Comma after last CTE only if usa CTEs are present
     cte_comma <- if (has_usatoday) "," else ""
