@@ -30,7 +30,7 @@ setup_baseball_db(
 
 ### DuckDB MCP Server (AI-assisted development)
 
-When using GitHub Copilot CLI, configuring a local DuckDB MCP server lets the AI agent query `baseball.duckdb` directly during development sessions.
+When using GitHub Copilot CLI or Claude Code, configuring a local DuckDB MCP server lets the AI agent query `baseball.duckdb` directly during development sessions.
 
 Install the server:
 
@@ -38,9 +38,19 @@ Install the server:
 uv tool install duckdb-mcp-server
 ```
 
-A template config lives at `.copilot/mcp-config.json` (gitignored — adjust the path for your machine). It points to `~/Documents/Data/baseball/baseball.duckdb` in `--read-only` mode. Override the path by setting `LAHMANS_DBDIR` in `~/.Renviron`.
+Then use the package helper to generate and write the config -- it resolves `~` to an absolute path (Python-based MCP servers do not expand it) and merges without clobbering other server entries:
 
-> `--read-only` is required. Without it an AI agent could modify or corrupt the database.
+```r
+# Preview first
+write_mcp_config()
+
+# Write to ~/.copilot/mcp-config.json
+write_mcp_config(dry_run = FALSE)
+```
+
+`setup_baseball_db()` prints this reminder automatically after a successful build.
+
+> `--readonly` is always enforced by `write_mcp_config()`. Without it an AI agent could modify or corrupt the database.
 
 ---
 

@@ -1,5 +1,14 @@
 # lahmanTools (development version)
 
+## New features
+
+* `write_mcp_config()` -- generates the JSON config entry needed to connect
+  GitHub Copilot CLI or Claude Code to `baseball.duckdb` via a local DuckDB
+  MCP server. Resolves `~` to an absolute path (required by Python-based MCP
+  servers), merges into an existing config without clobbering other server
+  entries, and always enforces `--readonly`. Defaults to `dry_run = TRUE` so
+  nothing is written until the user opts in.
+
 # lahmanTools 0.1.0
 
 Initial release.

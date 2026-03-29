@@ -22,6 +22,7 @@ Imports:
 Suggests:
     connections,
     dm,
+    jsonlite,
     re2,
     ggplot2,
     testthat (>= 3.0.0)

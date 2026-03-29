@@ -273,5 +273,7 @@ setup_baseball_db <- function(dbdir         = NULL,
 
   n <- length(DBI::dbListTables(con))
   message(sprintf("\nDone. %d tables/views written to %s", n, dbdir))
+  message("Tip: run write_mcp_config() to configure AI tools (Copilot CLI, Claude Code) ",
+          "to query this database.")
   invisible(dbdir)
 }

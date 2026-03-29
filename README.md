@@ -146,7 +146,20 @@ If you use [GitHub Copilot CLI](https://docs.github.com/en/copilot/using-github-
 uv tool install duckdb-mcp-server   # or: pip install duckdb-mcp-server
 ```
 
-Add to `~/.copilot/mcp-config.json` (Copilot CLI) or the equivalent config for your AI tool:
+Then let the package generate the config for you -- it resolves paths to
+absolute form (required by Python-based MCP servers) and handles merging
+with any existing config:
+
+```r
+# Preview the JSON that would be written
+write_mcp_config()
+
+# Write to ~/.copilot/mcp-config.json when satisfied
+write_mcp_config(dry_run = FALSE)
+```
+
+Or write it manually -- replace the paths with your actual binary location
+(`which duckdb-mcp-server`) and database path:
 
 ```json
 {
@@ -159,7 +172,7 @@ Add to `~/.copilot/mcp-config.json` (Copilot CLI) or the equivalent config for y
 }
 ```
 
-Replace the paths with your actual binary location (`which duckdb-mcp-server`) and database path. `--readonly` is required — omitting it allows an AI agent to mutate or drop tables.
+`--readonly` is required -- omitting it allows an AI agent to mutate or drop tables.
 
 ### What an interaction looks like
 
