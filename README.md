@@ -98,6 +98,43 @@ setup_baseball_db(
 )
 ```
 
+To add WAR-based salary efficiency analysis, pass `load_war = TRUE`. This requires
+[`baseballr`](https://cran.r-project.org/package=baseballr) and an internet connection.
+The Chadwick Bureau crosswalk (ODC-BY 1.0) and FanGraphs WAR leaderboards are fetched
+at runtime to your local database — no data is bundled with the package:
+
+```r
+# install.packages("baseballr")
+setup_baseball_db(load_war = TRUE, overwrite = TRUE)
+```
+
+This adds three supplemental tables and two derived views:
+
+| Added | Type | Description |
+|-------|------|-------------|
+| `ChadwickIDs` | Table | Chadwick Bureau player ID crosswalk (ODC-BY 1.0) |
+| `FangraphsBattingWAR` | Table | FanGraphs batter WAR leaderboard (1871–present) |
+| `FangraphsPitchingWAR` | Table | FanGraphs pitcher WAR leaderboard (2002–present) |
+| `PlayerIDs` | View | Lahman `playerID` joined to MLBAM, FanGraphs, Retrosheet, and BBREF IDs |
+| `PlayerWAR` | View | `bat_war` + `pit_war` + `total_war` per player-season |
+| `SalaryPerWAR` | View | `dollars_per_war` by player-season; includes `war_reliable` flag |
+
+> **`war_reliable` flag:** FanGraphs pitching WAR is only available from 2002 onward.
+> Pre-2002 pitcher rows in `SalaryPerWAR` will have near-zero `total_war` (batting
+> contribution only), making `dollars_per_war` misleading. Filter
+> `WHERE war_reliable = TRUE` for trustworthy analysis. Batting WAR is reliable for
+> all seasons 1985+.
+
+Loaders can also be run independently on an existing open connection:
+
+```r
+con <- connect_baseball_db(read_only = FALSE)
+load_chadwick_ids(con)           # Chadwick crosswalk only (ODC-BY 1.0)
+load_fangraphs_war(con)          # WAR + SalaryPerWAR (requires Chadwick first)
+load_statcast(con, years = 2023) # Statcast pitch data (2015+; ~700 MB/season)
+DBI::dbDisconnect(con, shutdown = TRUE)
+```
+
 ## Usage
 
 ```r
@@ -106,7 +143,7 @@ library(lahmanTools)
 con <- connect_baseball_db()          # read-only by default
 on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
 
-DBI::dbListTables(con)                # all 27 Lahman tables + 5 views
+DBI::dbListTables(con)                # all 27 Lahman tables + 8 views (more with load_war)
 ```
 
 ### Example: does an elite strikeout rotation pay off?
@@ -235,6 +272,7 @@ R/
   connect.R      # connect_baseball_db()  — open DuckDB connection
   setup_db.R     # setup_baseball_db()    — build / rebuild the database
   stats_views.R  # create_stats_views()   — register sabermetric SQL views
+  loaders.R      # load_chadwick_ids(), load_fangraphs_war(), load_statcast()
   scrape.R       # scrape_salaries()      — fetch USA Today salary data
   utils.R        # db_query(), dt_factors_to_char(), clean_names()
   globals.R      # globalVariables() declarations

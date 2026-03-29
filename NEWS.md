@@ -2,6 +2,31 @@
 
 ## New features
 
+* Three new runtime data loaders in `R/loaders.R`:
+  - `load_chadwick_ids(con)` -- downloads the Chadwick Bureau player ID
+    crosswalk via `baseballr` and writes it as `ChadwickIDs` to DuckDB.
+    Creates `PlayerIDs` view joining Lahman `playerID` to MLBAM, FanGraphs,
+    Retrosheet and Baseball Reference IDs. Licensed ODC-BY 1.0 (attribution
+    required).
+  - `load_fangraphs_war(con, years)` -- fetches FanGraphs batter and pitcher
+    WAR leaderboards (batting 1871+, pitching 2002+) and creates `PlayerWAR`
+    and `SalaryPerWAR` views. Requires `ChadwickIDs` for the FanGraphs-to-Lahman
+    join. `SalaryPerWAR` includes a `war_reliable` flag (FALSE for pitcher-seasons
+    before 2002 where pitching WAR is unavailable and `total_war` would be
+    near-zero batting-only).
+  - `load_statcast(con, years)` -- fetches Baseball Savant pitch-level data
+    (2015+ only, ~700 MB/season) and creates `StatcastSeason` batter aggregates
+    (exit velocity, launch angle, hard-hit rate, xBA, xwOBA).
+
+* `setup_baseball_db()` gains three new parameters:
+  - `load_chadwick = FALSE` -- pass `TRUE` to load the Chadwick crosswalk
+    during initial database build.
+  - `load_war = FALSE` -- pass `TRUE` to also fetch FanGraphs WAR (implies
+    `load_chadwick`).
+  - `war_years = 1985:2025` -- seasons to fetch for WAR data.
+
+* `baseballr` added to `Suggests`; required only by the three new loaders.
+
 * `write_mcp_config()` -- generates the JSON config entry needed to connect
   GitHub Copilot CLI or Claude Code to `baseball.duckdb` via a local DuckDB
   MCP server. Resolves `~` to an absolute path (required by Python-based MCP

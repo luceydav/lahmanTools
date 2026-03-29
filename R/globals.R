@@ -9,7 +9,11 @@ utils::globalVariables(c(
   # People columns used in scrape.R
   "nameLast", "nameFirst",
   # utils.R (dt_factors_to_char)
-  "factor_cols"
+  "factor_cols",
+  # loaders.R -- Chadwick register column references
+  "key_fangraphs", "key_mlbam",
+  # loaders.R -- FanGraphs leaderboard column
+  "playerid"
 ))
 
 #' @importFrom data.table := .SD as.data.table data.table fread fwrite rbindlist setnames

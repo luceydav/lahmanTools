@@ -7,33 +7,58 @@
 #' - **Spotrac** (`SalariesSpotrac`): player-level actuals 2017–2021
 #' - **USA Today** (`SalariesUSAToday`): player-level actuals 2022–2025
 #'
+#' Optionally fetches supplemental data via \pkg{baseballr}:
+#' - `load_chadwick = TRUE` downloads the Chadwick Bureau player ID crosswalk
+#'   and creates the `PlayerIDs` view (ODC-BY 1.0 licensed; safe to use locally).
+#' - `load_war = TRUE` additionally fetches FanGraphs WAR leaderboards and
+#'   creates the `PlayerWAR` and `SalaryPerWAR` views.  Implies
+#'   `load_chadwick = TRUE`.  Pitching WAR is available from FanGraphs from
+#'   2002 onward only; `SalaryPerWAR` includes a `war_reliable` flag to mark
+#'   pre-2002 pitcher rows where WAR values are incomplete.
+#'
 #' @param dbdir Path for the output `baseball.duckdb` file. Defaults to the
 #'   value of the `LAHMANS_DBDIR` environment variable if set, otherwise
 #'   `~/Documents/Data/baseball/baseball.duckdb`.
 #' @param sal_file Path to the combined USA Today salary CSV produced by
 #'   [scrape_salaries()]. When `NULL` (default), looks for
 #'   `salaries_*_with_playerID.csv` (non-Spotrac) in the same directory as
-#'   `dbdir`. USA Today data is not bundled — users must run
+#'   `dbdir`. USA Today data is not bundled -- users must run
 #'   [scrape_salaries()] to obtain it.
 #' @param spotrac_file Path to the combined Spotrac salary CSV produced by
 #'   `data-raw/salaries.R`. When `NULL` (default), looks for
 #'   `salaries_spotrac_*_with_playerID.csv` in the same directory as `dbdir`.
-#'   Spotrac data is not bundled — users must run `data-raw/salaries.R` to
+#'   Spotrac data is not bundled -- users must run `data-raw/salaries.R` to
 #'   obtain it.
 #' @param overwrite If `TRUE`, drop and recreate existing tables. Default
 #'   `FALSE` aborts if the file already exists.
+#' @param load_chadwick If `TRUE`, download the Chadwick Bureau player ID
+#'   crosswalk via \pkg{baseballr} and create the `PlayerIDs` view.
+#'   Requires an internet connection and \pkg{baseballr}.  Default `FALSE`.
+#' @param load_war If `TRUE`, fetch FanGraphs WAR leaderboards and create
+#'   `PlayerWAR` and `SalaryPerWAR` views.  Implies `load_chadwick = TRUE`.
+#'   Requires an internet connection and \pkg{baseballr}.  Default `FALSE`.
+#' @param war_years Integer vector of seasons to fetch for WAR data.
+#'   Defaults to `1985:2025` (full salary era).  Pitching WAR before 2002 is
+#'   not available from FanGraphs; see `SalaryPerWAR.war_reliable`.
 #'
 #' @return Invisibly returns `dbdir`.
 #' @export
 #'
 #' @examples
 #' \dontrun{
+#' # Lahman only
 #' setup_baseball_db()
+#'
+#' # With full WAR coverage (requires baseballr and internet)
+#' setup_baseball_db(load_war = TRUE, overwrite = TRUE)
 #' }
 setup_baseball_db <- function(dbdir         = NULL,
                                sal_file      = NULL,
                                spotrac_file  = NULL,
-                               overwrite     = FALSE) {
+                               overwrite     = FALSE,
+                               load_chadwick = FALSE,
+                               load_war      = FALSE,
+                               war_years     = 1985:2025) {
   if (is.null(dbdir)) {
     dbdir <- Sys.getenv(
       "LAHMANS_DBDIR",
@@ -281,6 +306,12 @@ setup_baseball_db <- function(dbdir         = NULL,
 
   # ── Stats views ──────────────────────────────────────────────────────────────
   create_stats_views(con)
+
+  # ── Optional supplemental loaders ────────────────────────────────────────────
+  # load_war implies load_chadwick (WAR join requires the Chadwick crosswalk)
+  if (load_war && !load_chadwick) load_chadwick <- TRUE
+  if (load_chadwick) load_chadwick_ids(con, overwrite = overwrite)
+  if (load_war)      load_fangraphs_war(con, years = war_years, overwrite = overwrite)
 
   n <- length(DBI::dbListTables(con))
   message(sprintf("\nDone. %d tables/views written to %s", n, dbdir))

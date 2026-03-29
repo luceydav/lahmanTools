@@ -20,6 +20,7 @@ Imports:
     rvest,
     xml2
 Suggests:
+    baseballr,
     connections,
     dm,
     jsonlite,
