@@ -10,8 +10,8 @@ The design choice matters at scale: DuckDB executes columnar SQL directly on the
 
 ## Data model
 
-20 Lahman tables loaded into DuckDB, colour-coded by functional group.
-Arrows show primary-key → foreign-key relationships.
+All 27 Lahman tables are loaded into DuckDB. The diagram shows the 20 primary tables,
+colour-coded by functional group, with arrows for primary-key → foreign-key relationships.
 
 ![lahmanTools schema](man/figures/lahmanTools_schema.svg)
 
@@ -27,6 +27,20 @@ Arrows show primary-key → foreign-key relationships.
 | ⚫ Grey | Lookups | `Parks`, `HomeGames`, `SeriesPost` |
 
 To regenerate after schema changes: `Rscript analysis/schema_dm.R` (requires `dm`, `DiagrammeR`, `DiagrammeRsvg`).
+
+### Derived views
+
+Five sabermetric SQL views are created on top of the base tables by `setup_baseball_db()`.
+These are what most queries should target — they pre-compute the rate stats and handle
+multi-source salary stitching.
+
+| View | Base tables | Key metrics |
+|------|-------------|-------------|
+| `BattingStats` | `Batting` | PA, AVG, OBP, SLG, OPS, ISO, BABIP, BB%, K% |
+| `PitchingStats` | `Pitching`, `Teams` | IP, ERA, WHIP, K/9, BB/9, HR/9, FIP, K/BB |
+| `FieldingStats` | `Fielding` | FPCT, RF/9, RF/G by position |
+| `SalariesAll` | `Salaries`, `SalariesSpotrac`, `SalariesUSAToday` | Lahman (1985-2016) + Spotrac (2017-2021) + USA Today (2022-2025); filter `is_actual = TRUE` for confirmed figures |
+| `TeamPayroll` | `SalariesAll` | Total and per-position payroll by team-season |
 
 ## Requirements
 
@@ -199,16 +213,6 @@ and window functions work as expected.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for full setup instructions including
 config file locations for different AI tools.
-
-## Views
-
-| View | Base tables | Key metrics |
-|------|-------------|-------------|
-| `BattingStats` | `Batting` | PA, AVG, OBP, SLG, OPS, ISO, BABIP, BB%, K% |
-| `PitchingStats` | `Pitching`, `Teams` | IP, ERA, WHIP, K/9, BB/9, HR/9, FIP, K/BB |
-| `FieldingStats` | `Fielding` | FPCT, RF/9, RF/G by position |
-| `SalariesAll` | `Salaries`, `SalariesUSAToday` | Lahman (≤ 2016) + USA Today (2017+); AAV imputation for multi-year contracts |
-| `TeamPayroll` | `SalariesAll` | Total and per-position payroll by team-season |
 
 ## Package structure
 
