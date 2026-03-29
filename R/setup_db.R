@@ -266,6 +266,17 @@ setup_baseball_db <- function(dbdir         = NULL,
       usatoday_union
     ))
     message(sprintf("  %-25s (view)", "SalariesAll"))
+  } else {
+    # Lahman Salaries (1985-2016) only -- fallback when no supplemental files loaded
+    DBI::dbExecute(con, "
+      CREATE OR REPLACE VIEW SalariesAll AS
+      SELECT playerID, yearID, teamID, lgID,
+             salary::DOUBLE AS salary,
+             'lahman'       AS source,
+             TRUE           AS is_actual
+      FROM   Salaries
+    ")
+    message(sprintf("  %-25s (view, Lahman only -- no supplemental salary files)", "SalariesAll"))
   }
 
   # ── Stats views ──────────────────────────────────────────────────────────────

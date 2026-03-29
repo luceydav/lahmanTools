@@ -9,6 +9,23 @@
   entries, and always enforces `--readonly`. Defaults to `dry_run = TRUE` so
   nothing is written until the user opts in.
 
+* Three new analytical views created by `create_stats_views()` / `setup_baseball_db()`:
+  - `PlayerAcquisitionType` -- one row per player-team; `acq_type` column
+    classifies as `homegrown` (debut year = first year with team),
+    `young_acq` (arrived post-debut, age < 26), or `veteran_acq`.
+    Eliminates the repeated 3-CTE acquisition-classification pattern in
+    analysis queries.
+  - `LeagueMedianSalary` -- `med_sal`, `avg_sal`, `n_players` by season from
+    `SalariesAll`. Use `salary / med_sal` for relative-salary normalisation.
+  - `TeamPayroll` -- `total_salary`, `n_players`, `median_salary`, `max_salary`
+    by team-season from `SalariesAll`. Was documented in README but missing
+    from the code; now implemented.
+
+* `era_label(yr)` SQL macro registered by `create_stats_views()`. Replaces
+  the repeated `CASE WHEN yearID <= 2002 THEN 'Pre-Moneyball' ...` block in
+  every analysis query. Returns `'Pre-Moneyball'`, `'Moneyball'`, `'Big Data'`,
+  or `NULL` for years outside 1998-present.
+
 # lahmanTools 0.1.0
 
 Initial release.

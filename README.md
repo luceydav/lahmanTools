@@ -28,11 +28,12 @@ colour-coded by functional group, with arrows for primary-key → foreign-key re
 
 To regenerate after schema changes: `Rscript analysis/schema_dm.R` (requires `dm`, `DiagrammeR`, `DiagrammeRsvg`).
 
-### Derived views
+### Derived views and macros
 
-Five sabermetric SQL views are created on top of the base tables by `setup_baseball_db()`.
-These are what most queries should target — they pre-compute the rate stats and handle
-multi-source salary stitching.
+Eight views and one scalar macro are created by `setup_baseball_db()`.
+Query them directly via SQL — no R wrangling required for the common patterns.
+
+**Per-player stats views** (one row per player-year-stint-team):
 
 | View | Base tables | Key metrics |
 |------|-------------|-------------|
@@ -40,7 +41,20 @@ multi-source salary stitching.
 | `PitchingStats` | `Pitching`, `Teams` | IP, ERA, WHIP, K/9, BB/9, HR/9, FIP, K/BB |
 | `FieldingStats` | `Fielding` | FPCT, RF/9, RF/G by position |
 | `SalariesAll` | `Salaries`, `SalariesSpotrac`, `SalariesUSAToday` | Lahman (1985-2016) + Spotrac (2017-2021) + USA Today (2022-2025); filter `is_actual = TRUE` for confirmed figures |
-| `TeamPayroll` | `SalariesAll` | Total and per-position payroll by team-season |
+
+**Analytical views** (pre-built patterns for multi-era salary analysis):
+
+| View | Description |
+|------|-------------|
+| `PlayerAcquisitionType` | One row per player-team; `acq_type` is `homegrown`, `young_acq` (arrived pre-26), or `veteran_acq` |
+| `LeagueMedianSalary` | League-wide `med_sal`, `avg_sal`, `n_players` by season — use for `salary / med_sal` normalisation |
+| `TeamPayroll` | `total_salary`, `n_players`, `median_salary`, `max_salary` by team-season |
+
+**Scalar macro** (callable in any SQL query):
+
+| Macro | Usage | Returns |
+|-------|-------|---------|
+| `era_label(yr)` | `SELECT era_label(yearID) AS era …` | `'Pre-Moneyball'` / `'Moneyball'` / `'Big Data'` / `NULL` |
 
 ## Requirements
 
