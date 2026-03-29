@@ -136,6 +136,57 @@ db_query(con, "
 ")
 ```
 
+## AI-assisted querying (MCP)
+
+If you use [GitHub Copilot CLI](https://docs.github.com/en/copilot/using-github-copilot/using-github-copilot-in-the-command-line) or [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview), you can connect either tool to `baseball.duckdb` via a local [DuckDB MCP server](https://github.com/alexmacy/duckdb-mcp-server). The AI agent writes and executes SQL against your live database in response to plain-English questions — no R session required.
+
+### Setup
+
+```bash
+uv tool install duckdb-mcp-server   # or: pip install duckdb-mcp-server
+```
+
+Add to `~/.copilot/mcp-config.json` (Copilot CLI) or the equivalent config for your AI tool:
+
+```json
+{
+  "mcpServers": {
+    "baseball": {
+      "command": "/Users/you/.local/bin/duckdb-mcp-server",
+      "args": ["--db-path", "/path/to/baseball.duckdb", "--readonly"]
+    }
+  }
+}
+```
+
+Replace the paths with your actual binary location (`which duckdb-mcp-server`) and database path. `--readonly` is required — omitting it allows an AI agent to mutate or drop tables.
+
+### What an interaction looks like
+
+Once configured, you ask questions in the chat interface and the agent translates them to SQL automatically:
+
+```
+User: Which era had the best payroll efficiency — wins per dollar spent?
+
+Agent: Querying SalariesAll JOIN Teams, grouping by era...
+
+  era            avg_wins_per_1M_USD
+  Pre-Moneyball  8.3
+  Moneyball      11.2
+  Big Data        5.7
+
+The Moneyball era (2003-2011) had the best efficiency. 2012 was the
+single most efficient season at 23.5 wins/$1M. Efficiency has declined
+steadily as salary inflation has outpaced on-field wins.
+```
+
+The full schema is available — player careers, team trends, era comparisons,
+salary analysis across the three-source `SalariesAll` view. Multi-table joins
+and window functions work as expected.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for full setup instructions including
+config file locations for different AI tools.
+
 ## Views
 
 | View | Base tables | Key metrics |
