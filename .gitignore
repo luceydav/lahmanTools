@@ -30,8 +30,9 @@ Salaries.csv
 # Test artifacts
 tests/testthat/_snaps/
 
-# Copilot CLI LSP config (environment-specific, not for contributors)
+# Copilot CLI config (environment-specific, not for contributors)
 .github/lsp.json
+.copilot/mcp-config.json
 
 # Old scratch notebooks (superseded by analysis/)
 inst/notebooks/

@@ -1,5 +1,49 @@
 # Contributing to lahmanTools
 
+## Dev Setup
+
+### Prerequisites
+
+- R ≥ 4.1.0 with `devtools`, `data.table`, `duckdb`, `DBI`, `testthat`
+- [GitHub Copilot CLI](https://docs.github.com/copilot/concepts/agents/about-copilot-cli) (optional but recommended for AI-assisted development)
+
+### Build the database
+
+```r
+library(lahmanTools)
+setup_baseball_db()
+```
+
+To include extended salary data (2017–2025):
+
+```r
+scrape_salaries(years = 2017:2025,
+                output_dir = "~/Documents/Data/baseball/mlb_salaries")
+
+setup_baseball_db(
+  sal_file = "~/Documents/Data/baseball/mlb_salaries/salaries_2017_2025_with_playerID.csv",
+  overwrite = TRUE
+)
+```
+
+> **Scraped data policy:** USA Today and Spotrac salary CSV files must **not** be redistributed. They are gitignored. See [data-raw/README.md](data-raw/README.md).
+
+### DuckDB MCP Server (AI-assisted development)
+
+When using GitHub Copilot CLI, configuring a local DuckDB MCP server lets the AI agent query `baseball.duckdb` directly during development sessions.
+
+Install the server:
+
+```bash
+uv tool install duckdb-mcp-server
+```
+
+A template config lives at `.copilot/mcp-config.json` (gitignored — adjust the path for your machine). It points to `~/Documents/Data/baseball/baseball.duckdb` in `--read-only` mode. Override the path by setting `LAHMANS_DBDIR` in `~/.Renviron`.
+
+> `--read-only` is required. Without it an AI agent could modify or corrupt the database.
+
+---
+
 ## Branching strategy
 
 ```
