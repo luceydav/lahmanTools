@@ -57,13 +57,21 @@ scrape_salaries <- function(years      = 2017:2025,
     slug <- year_slugs[[yr]]
     message("Scraping ", yr, "...")
 
-    yr_data <- data.table::rbindlist(
-      lapply(seq_len(1000), function(id) {
-        if (id %% 100 == 0) message("  ... record ", id)
-        scrape_player_(slug, yr, id)
-      }),
-      fill = TRUE
-    )
+    yr_rows        <- list()
+    id             <- 1L
+    consecutive_miss <- 0L
+    while (consecutive_miss < 50L) {
+      if (id %% 100L == 0L) message("  ... record ", id)
+      result <- scrape_player_(slug, yr, id)
+      if (is.null(result)) {
+        consecutive_miss <- consecutive_miss + 1L
+      } else {
+        consecutive_miss <- 0L
+        yr_rows[[length(yr_rows) + 1L]] <- result
+      }
+      id <- id + 1L
+    }
+    yr_data <- data.table::rbindlist(yr_rows, fill = TRUE)
 
     if (nrow(yr_data) > 0) {
       data.table::fwrite(yr_data, out_file)

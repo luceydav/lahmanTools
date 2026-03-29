@@ -154,10 +154,16 @@ setup_baseball_db <- function(dbdir         = NULL,
             WHEN regexp_extract(years, '-(\\d{4})\\)', 1) <> ''
               THEN TRY_CAST(regexp_extract(years, '-(\\d{4})\\)', 1) AS INTEGER)
             WHEN regexp_extract(years, '-(\\d{2})\\)', 1) <> ''
-              THEN TRY_CAST(
-                     left(regexp_extract(years, '\\((\\d{4})-', 1), 2) ||
-                     regexp_extract(years, '-(\\d{2})\\)', 1)
-                   AS INTEGER)
+              -- Century-safe: base century from c_start + 100 if 2-digit end wraps
+              THEN (
+                     (TRY_CAST(regexp_extract(years, '\\((\\d{4})-', 1) AS INTEGER) / 100) * 100
+                     + TRY_CAST(regexp_extract(years, '-(\\d{2})\\)', 1) AS INTEGER)
+                     + CASE
+                         WHEN TRY_CAST(regexp_extract(years, '-(\\d{2})\\)', 1) AS INTEGER)
+                                < TRY_CAST(regexp_extract(years, '\\((\\d{4})-', 1) AS INTEGER) % 100
+                         THEN 100 ELSE 0
+                       END
+                   )::INTEGER
           END                                                               AS c_end
         FROM SalariesUSAToday
         WHERE playerID IS NOT NULL
