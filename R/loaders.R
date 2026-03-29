@@ -1,6 +1,10 @@
 # ── Internal view helpers (called by loaders; testable without network) ────────
 
 create_player_ids_view_ <- function(con) {
+  if (!("People" %in% DBI::dbListTables(con))) {
+    message("  PlayerIDs view skipped -- People table not present (run setup_baseball_db first).")
+    return(invisible(con))
+  }
   DBI::dbExecute(con, "
     CREATE OR REPLACE VIEW PlayerIDs AS
     SELECT
@@ -23,6 +27,14 @@ create_player_ids_view_ <- function(con) {
 }
 
 create_war_views_ <- function(con) {
+  tbls <- DBI::dbListTables(con)
+  needed <- c("People", "ChadwickIDs", "FangraphsBattingWAR",
+              "FangraphsPitchingWAR", "SalariesAll", "Pitching")
+  missing <- setdiff(needed, tbls)
+  if (length(missing)) {
+    message("  WAR views skipped -- missing tables: ", paste(missing, collapse = ", "))
+    return(invisible(con))
+  }
   # PlayerWAR: unified batting + pitching fWAR joined to Lahman playerID via
   # Chadwick.  FanGraphs player IDs are stored as VARCHAR in both tables.
   # Two-player seasons (traded players) are collapsed to one row per yearID by
@@ -238,30 +250,37 @@ load_fangraphs_war <- function(con, years = 1985:2025, overwrite = FALSE) {
   end_yr   <- max(years)
 
   message(sprintf("Fetching FanGraphs batting WAR %d-%d...", start_yr, end_yr))
-  bat <- tryCatch(
-    data.table::as.data.table(
-      baseballr::fg_batter_leaders(
-        startseason = start_yr, endseason = end_yr, qual = 0, ind = 1
+  bat_list <- lapply(years, function(yr) {
+    tryCatch({
+      d <- data.table::as.data.table(
+        baseballr::fg_bat_leaders(startseason = yr, endseason = yr, qual = 0)
       )
-    ),
-    error = function(e)
-      stop("Failed to fetch FanGraphs batting WAR: ", conditionMessage(e))
-  )
+      if ("playerid" %in% names(d)) d[, playerid := as.character(playerid)]
+      d
+    }, error = function(e) {
+      warning(sprintf("FanGraphs batting WAR unavailable for %d: %s", yr, conditionMessage(e)))
+      NULL
+    })
+  })
+  bat <- data.table::rbindlist(Filter(Negate(is.null), bat_list), fill = TRUE)
 
   message(sprintf("Fetching FanGraphs pitching WAR %d-%d...", start_yr, end_yr))
-  pit <- tryCatch(
-    data.table::as.data.table(
-      baseballr::fg_pitcher_leaders(
-        startseason = start_yr, endseason = end_yr, qual = 0, ind = 1
+  pit_list <- lapply(years[years >= 2002L], function(yr) {
+    tryCatch({
+      d <- data.table::as.data.table(
+        baseballr::fg_pitch_leaders(startseason = yr, endseason = yr, qual = 0)
       )
-    ),
-    error = function(e)
-      stop("Failed to fetch FanGraphs pitching WAR: ", conditionMessage(e))
-  )
+      if ("playerid" %in% names(d)) d[, playerid := as.character(playerid)]
+      d
+    }, error = function(e) {
+      warning(sprintf("FanGraphs pitching WAR unavailable for %d: %s", yr, conditionMessage(e)))
+      NULL
+    })
+  })
+  pit <- data.table::rbindlist(Filter(Negate(is.null), pit_list), fill = TRUE)
 
-  # Normalise FG player ID to VARCHAR before writing
-  if ("playerid" %in% names(bat)) bat[, playerid := as.character(playerid)]
-  if ("playerid" %in% names(pit)) pit[, playerid := as.character(playerid)]
+  if (nrow(bat) == 0L) stop("No FanGraphs batting WAR data retrieved.")
+  if (nrow(pit) == 0L) warning("No FanGraphs pitching WAR data retrieved (pitching WAR only available 2002+).")
 
   DBI::dbWriteTable(con, "FangraphsBattingWAR",  bat, overwrite = overwrite)
   DBI::dbWriteTable(con, "FangraphsPitchingWAR", pit, overwrite = overwrite)
