@@ -81,7 +81,11 @@ rsync -a /tmp/lahmans-git-work/.git/refs/ $PROJ/.git/refs/
 rsync -a /tmp/lahmans-git-work/.git/objects/ $PROJ/.git/objects/
 ```
 
-**Branch strategy: always commit directly to `main`.** Do NOT use a `dev` branch — this is a solo project and branching without consistently merging back causes divergence conflicts. The `/tmp` rsync is the safety buffer.
+**Branch strategy:**
+- All work commits go to `dev` — **never commit directly to `main`**
+- At release: PR `dev → main`, merge, tag
+- After merge: immediately `git rebase origin/main` on `dev` so the next cycle starts clean (avoids divergence)
+- CRITICAL: The divergence conflict in v0.2.0 happened because earlier sessions broke this rule and committed directly to `main`
 
 `git checkout` in the project dir will fail — files are correct but the local branch pointer may lag.
 
