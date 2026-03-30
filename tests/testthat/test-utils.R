@@ -59,3 +59,119 @@ test_that("db_query passes extra arguments to dbGetQuery", {
   result <- db_query(con, "SELECT * FROM nums ORDER BY n")
   expect_equal(nrow(result), 100L)
 })
+
+
+# --- normalise_player_name ---------------------------------------------------
+
+test_that("normalise_player_name strips asterisks", {
+  expect_equal(normalise_player_name("Harper, Bryce*"), "harper, bryce")
+})
+
+test_that("normalise_player_name strips suffixes", {
+  expect_equal(normalise_player_name("Acuna Jr., Ronald"), "acuna, ronald")
+  expect_equal(normalise_player_name("Guerrero Sr., Vladimir"), "guerrero, vladimir")
+  expect_equal(normalise_player_name("Smith III, John"), "smith, john")
+})
+
+test_that("normalise_player_name transliterates accents", {
+  expect_equal(normalise_player_name("Acu\u00f1a, Ronald"), "acuna, ronald")
+})
+
+test_that("normalise_player_name fixes UTF-8 mojibake", {
+  # "Ã³" is the mojibake for "ó" (UTF-8 bytes read as Latin-1)
+  mojibake <- "Can\u00c3\u00b3, Robinson"
+  expect_equal(normalise_player_name(mojibake), "cano, robinson")
+})
+
+test_that("normalise_player_name normalises initials", {
+  expect_equal(normalise_player_name("Martinez, J.D."), "martinez, j d")
+  expect_equal(normalise_player_name("Martinez, JD"), "martinez, j d")
+  expect_equal(normalise_player_name("Realmuto, JT"), "realmuto, j t")
+})
+
+test_that("normalise_player_name strips apostrophes", {
+  expect_equal(normalise_player_name("d'Arnaud, Travis"), "darnaud, travis")
+})
+
+test_that("normalise_player_name handles vectors", {
+  input <- c("Harper, Bryce*", "Acuna Jr., Ronald", "Smith, John")
+  result <- normalise_player_name(input)
+  expect_length(result, 3L)
+  expect_equal(result, c("harper, bryce", "acuna, ronald", "smith, john"))
+})
+
+
+# --- match_player_ids --------------------------------------------------------
+
+# Helper to build a minimal People data.table for testing
+make_test_people <- function() {
+  data.table::data.table(
+    playerID  = c("harpebr03", "acunaro01", "martij06",
+                   "darntra01", "smithjo99"),
+    nameFirst = c("Bryce",     "Ronald",    "J. D.",
+                   "Travis",    "John"),
+    nameLast  = c("Harper",    "Acu\u00f1a", "Martinez",
+                   "d'Arnaud",  "Smith"),
+    debut     = c("2012-04-28", "2018-04-25", "2011-08-11",
+                   "2013-04-26", "2020-07-24"),
+    finalGame = c(NA,           NA,           NA,
+                   "2024-09-29", NA)
+  )
+}
+
+test_that("match_player_ids Pass 1: exact match works", {
+  people <- make_test_people()
+  sal <- data.table::data.table(
+    player = "Smith, John",
+    yearID = 2022L
+  )
+  match_player_ids(sal, people)
+  expect_equal(sal$playerID, "smithjo99")
+})
+
+test_that("match_player_ids Pass 2: normalised match catches suffixes + accents", {
+  people <- make_test_people()
+  sal <- data.table::data.table(
+    player = c("Acuna Jr., Ronald", "d'Arnaud, Travis"),
+    yearID = c(2023L, 2022L)
+  )
+  match_player_ids(sal, people)
+  expect_equal(sal$playerID, c("acunaro01", "darntra01"))
+})
+
+test_that("match_player_ids Pass 2: asterisks stripped", {
+  people <- make_test_people()
+  sal <- data.table::data.table(
+    player = "Harper, Bryce*",
+    yearID = 2023L
+  )
+  match_player_ids(sal, people)
+  expect_equal(sal$playerID, "harpebr03")
+})
+
+test_that("match_player_ids leaves truly unmatched as NA", {
+  people <- make_test_people()
+  sal <- data.table::data.table(
+    player = "Nonexistent, Player",
+    yearID = 2023L
+  )
+  match_player_ids(sal, people)
+  expect_true(is.na(sal$playerID))
+})
+
+test_that("match_player_ids Pass 3: disambiguates by year", {
+  # Two people with the same name but different eras
+  people <- data.table::data.table(
+    playerID  = c("johnjr01", "johnjr02"),
+    nameFirst = c("Junior",   "Junior"),
+    nameLast  = c("Johnson",  "Johnson"),
+    debut     = c("1990-04-01", "2018-04-01"),
+    finalGame = c("2005-09-30", NA)
+  )
+  sal <- data.table::data.table(
+    player = "Johnson, Junior",
+    yearID = 2022L
+  )
+  match_player_ids(sal, people)
+  expect_equal(sal$playerID, "johnjr02")
+})
