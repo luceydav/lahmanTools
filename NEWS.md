@@ -50,57 +50,6 @@
   every analysis query. Returns `'Pre-Moneyball'`, `'Moneyball'`, `'Big Data'`,
   or `NULL` for years outside 1998-present.
 
-## New features
-
-* Three new runtime data loaders in `R/loaders.R`:
-  - `load_chadwick_ids(con)` -- downloads the Chadwick Bureau player ID
-    crosswalk via `baseballr` and writes it as `ChadwickIDs` to DuckDB.
-    Creates `PlayerIDs` view joining Lahman `playerID` to MLBAM, FanGraphs,
-    Retrosheet and Baseball Reference IDs. Licensed ODC-BY 1.0 (attribution
-    required).
-  - `load_fangraphs_war(con, years)` -- fetches FanGraphs batter and pitcher
-    WAR leaderboards (batting 1871+, pitching 2002+) and creates `PlayerWAR`
-    and `SalaryPerWAR` views. Requires `ChadwickIDs` for the FanGraphs-to-Lahman
-    join. `SalaryPerWAR` includes a `war_reliable` flag (FALSE for pitcher-seasons
-    before 2002 where pitching WAR is unavailable and `total_war` would be
-    near-zero batting-only).
-  - `load_statcast(con, years)` -- fetches Baseball Savant pitch-level data
-    (2015+ only, ~700 MB/season) and creates `StatcastSeason` batter aggregates
-    (exit velocity, launch angle, hard-hit rate, xBA, xwOBA).
-
-* `setup_baseball_db()` gains three new parameters:
-  - `load_chadwick = FALSE` -- pass `TRUE` to load the Chadwick crosswalk
-    during initial database build.
-  - `load_war = FALSE` -- pass `TRUE` to also fetch FanGraphs WAR (implies
-    `load_chadwick`).
-  - `war_years = 1985:2025` -- seasons to fetch for WAR data.
-
-* `baseballr` added to `Suggests`; required only by the three new loaders.
-
-* `write_mcp_config()` -- generates the JSON config entry needed to connect
-  GitHub Copilot CLI or Claude Code to `baseball.duckdb` via a local DuckDB
-  MCP server. Resolves `~` to an absolute path (required by Python-based MCP
-  servers), merges into an existing config without clobbering other server
-  entries, and always enforces `--readonly`. Defaults to `dry_run = TRUE` so
-  nothing is written until the user opts in.
-
-* Three new analytical views created by `create_stats_views()` / `setup_baseball_db()`:
-  - `PlayerAcquisitionType` -- one row per player-team; `acq_type` column
-    classifies as `homegrown` (debut year = first year with team),
-    `young_acq` (arrived post-debut, age < 26), or `veteran_acq`.
-    Eliminates the repeated 3-CTE acquisition-classification pattern in
-    analysis queries.
-  - `LeagueMedianSalary` -- `med_sal`, `avg_sal`, `n_players` by season from
-    `SalariesAll`. Use `salary / med_sal` for relative-salary normalisation.
-  - `TeamPayroll` -- `total_salary`, `n_players`, `median_salary`, `max_salary`
-    by team-season from `SalariesAll`. Was documented in README but missing
-    from the code; now implemented.
-
-* `era_label(yr)` SQL macro registered by `create_stats_views()`. Replaces
-  the repeated `CASE WHEN yearID <= 2002 THEN 'Pre-Moneyball' ...` block in
-  every analysis query. Returns `'Pre-Moneyball'`, `'Moneyball'`, `'Big Data'`,
-  or `NULL` for years outside 1998-present.
-
 # lahmanTools 0.1.0
 
 Initial release.
