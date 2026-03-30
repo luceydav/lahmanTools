@@ -70,14 +70,18 @@ Introspect: `SHOW TABLES`, `DESCRIBE <tbl>`, `SUMMARIZE <tbl>`, `dm::dm_from_con
 
 ## Git Workaround (macOS sandbox)
 
-macOS sandbox blocks git operations in the project directory. **All git ops go through `/tmp/lahmans-git-work/`:**
+macOS sandbox blocks git writes in the project directory. **All git ops go through `/tmp/lahmans-git-work/`:**
 
 ```bash
+PROJ=/Users/davidlucey/Documents/Projects/lahmans
 rsync -a --exclude='.git' --exclude='*.duckdb' $PROJ/ /tmp/lahmans-git-work/
-# git add / commit / push / gh pr from /tmp/lahmans-git-work/
+rm -rf /tmp/lahmans-git-work/.git/refs/refs 2>/dev/null || true  # remove stale dup refs
+# git add / commit / push from /tmp/lahmans-git-work/
 rsync -a /tmp/lahmans-git-work/.git/refs/ $PROJ/.git/refs/
 rsync -a /tmp/lahmans-git-work/.git/objects/ $PROJ/.git/objects/
 ```
+
+**Branch strategy: always commit directly to `main`.** Do NOT use a `dev` branch — this is a solo project and branching without consistently merging back causes divergence conflicts. The `/tmp` rsync is the safety buffer.
 
 `git checkout` in the project dir will fail — files are correct but the local branch pointer may lag.
 
