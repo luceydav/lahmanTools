@@ -10,7 +10,7 @@ utils::globalVariables(c(
   "nameLast", "nameFirst",
   # match_player_ids internal columns
   "player_exact", "player_norm", "debut_year", "final_year",
-  ".row_idx", "n_matches",
+  ".row_idx", "n_matches", ".match_teamID", "last_norm", "first_init", "n",
   # utils.R (dt_factors_to_char)
   "factor_cols",
   # loaders.R -- Chadwick register column references
