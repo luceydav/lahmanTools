@@ -4,9 +4,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Data: CC BY-SA 3.0](https://img.shields.io/badge/Data-CC%20BY--SA%203.0-blue.svg)](https://creativecommons.org/licenses/by-sa/3.0/)
 
-`lahmanTools` loads the full [Lahman](https://cran.r-project.org/package=Lahman) baseball database (1871–2025) into a persistent, file-backed **DuckDB** instance and exposes pre-built sabermetric SQL views. Analysis runs via `data.table` and plain SQL — no tidyverse dependency, no loading 27 tables into memory.
+`lahmanTools` loads the [Lahman](https://cran.r-project.org/package=Lahman) baseball database (1871–2025) into a persistent **DuckDB** instance and supplements it with salary data through 2025 (via Spotrac and USA Today) and FanGraphs WAR back to 1985. Pre-built SQL views handle the common sabermetric patterns — OPS, FIP, salary-per-WAR, team payroll, acquisition type. Connect the database to **GitHub Copilot CLI** or **Claude** via the included MCP server config and query 150 years of baseball in plain English.
 
-The design choice matters at scale: DuckDB executes columnar SQL directly on the file, so aggregations over 150 years of play-by-play data that would choke an in-memory data frame run in milliseconds.
+Analysis in R runs via `data.table` and plain SQL — no tidyverse dependency, no loading 30+ tables into memory. DuckDB executes columnar SQL directly on the file, so aggregations across the full history run in milliseconds.
 
 ## Data model
 
@@ -30,7 +30,7 @@ To regenerate after schema changes: `Rscript analysis/schema_dm.R` (requires `dm
 
 ### Derived views and macros
 
-Eight views and one scalar macro are created by `setup_baseball_db()`.
+Ten views and one scalar macro are created by `setup_baseball_db()`.
 Query them directly via SQL — no R wrangling required for the common patterns.
 
 **Per-player stats views** (one row per player-year-stint-team):
@@ -41,6 +41,14 @@ Query them directly via SQL — no R wrangling required for the common patterns.
 | `PitchingStats` | `Pitching`, `Teams` | IP, ERA, WHIP, K/9, BB/9, HR/9, FIP, K/BB |
 | `FieldingStats` | `Fielding` | FPCT, RF/9, RF/G by position |
 | `SalariesAll` | `Salaries`, `SalariesSpotrac`, `SalariesUSAToday` | Lahman (1985-2016) + Spotrac (2017-2021) + USA Today (2022-2025); filter `is_actual = TRUE` for confirmed figures |
+
+**WAR and salary efficiency views** (require `load_war = TRUE`; see [Setup](#setup)):
+
+| View | Description |
+|------|-------------|
+| `PlayerIDs` | Lahman `playerID` joined to MLBAM, FanGraphs, Retrosheet, and BBREF IDs via Chadwick crosswalk |
+| `PlayerWAR` | `bat_war` + `pit_war` + `total_war` per player-season (1985+) |
+| `SalaryPerWAR` | `dollars_per_war` by player-season with `era` label |
 
 **Analytical views** (pre-built patterns for multi-era salary analysis):
 
@@ -108,22 +116,20 @@ at runtime to your local database — no data is bundled with the package:
 setup_baseball_db(load_war = TRUE, overwrite = TRUE)
 ```
 
-This adds three supplemental tables and two derived views:
+This adds three supplemental tables and three derived views:
 
 | Added | Type | Description |
 |-------|------|-------------|
 | `ChadwickIDs` | Table | Chadwick Bureau player ID crosswalk (ODC-BY 1.0) |
 | `FangraphsBattingWAR` | Table | FanGraphs batter WAR leaderboard (1871–present) |
-| `FangraphsPitchingWAR` | Table | FanGraphs pitcher WAR leaderboard (2002–present) |
+| `FangraphsPitchingWAR` | Table | FanGraphs pitcher WAR leaderboard (1985–present) |
 | `PlayerIDs` | View | Lahman `playerID` joined to MLBAM, FanGraphs, Retrosheet, and BBREF IDs |
 | `PlayerWAR` | View | `bat_war` + `pit_war` + `total_war` per player-season |
-| `SalaryPerWAR` | View | `dollars_per_war` by player-season; includes `war_reliable` flag |
+| `SalaryPerWAR` | View | `dollars_per_war` by player-season with `era` label |
 
-> **`war_reliable` flag:** FanGraphs pitching WAR is only available from 2002 onward.
-> Pre-2002 pitcher rows in `SalaryPerWAR` will have near-zero `total_war` (batting
-> contribution only), making `dollars_per_war` misleading. Filter
-> `WHERE war_reliable = TRUE` for trustworthy analysis. Batting WAR is reliable for
-> all seasons 1985+.
+> FanGraphs WAR now covers batting and pitching back to 1985, so `war_reliable`
+> is TRUE for all rows in the salary era. The flag is retained for backward
+> compatibility.
 
 Loaders can also be run independently on an existing open connection:
 
@@ -143,7 +149,7 @@ library(lahmanTools)
 con <- connect_baseball_db()          # read-only by default
 on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
 
-DBI::dbListTables(con)                # all 27 Lahman tables + 8 views (more with load_war)
+DBI::dbListTables(con)                # 27+ Lahman tables + 10 views (with load_war)
 ```
 
 ### Example: does an elite strikeout rotation pay off?
@@ -274,6 +280,7 @@ R/
   stats_views.R  # create_stats_views()   — register sabermetric SQL views
   loaders.R      # load_chadwick_ids(), load_fangraphs_war(), load_statcast()
   scrape.R       # scrape_salaries()      — fetch USA Today salary data
+  mcp_config.R   # write_mcp_config()     — generate MCP server config for AI tools
   utils.R        # db_query(), dt_factors_to_char(), clean_names()
   globals.R      # globalVariables() declarations
 ```

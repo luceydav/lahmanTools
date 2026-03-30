@@ -9,11 +9,10 @@
     Retrosheet and Baseball Reference IDs. Licensed ODC-BY 1.0 (attribution
     required).
   - `load_fangraphs_war(con, years)` -- fetches FanGraphs batter and pitcher
-    WAR leaderboards (batting 1871+, pitching 2002+) and creates `PlayerWAR`
+    WAR leaderboards (batting 1871+, pitching 1985+) and creates `PlayerWAR`
     and `SalaryPerWAR` views. Requires `ChadwickIDs` for the FanGraphs-to-Lahman
-    join. `SalaryPerWAR` includes a `war_reliable` flag (FALSE for pitcher-seasons
-    before 2002 where pitching WAR is unavailable and `total_war` would be
-    near-zero batting-only).
+    join. `SalaryPerWAR` includes a `war_reliable` flag (TRUE for all rows in
+    the salary era 1985+; retained for backward compatibility).
   - `load_statcast(con, years)` -- fetches Baseball Savant pitch-level data
     (2015+ only, ~700 MB/season) and creates `StatcastSeason` batter aggregates
     (exit velocity, launch angle, hard-hit rate, xBA, xwOBA).
