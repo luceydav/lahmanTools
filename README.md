@@ -295,11 +295,23 @@ and must not be redistributed.
 
 ## Attribution
 
-Baseball statistics provided by [Sean Lahman](http://www.seanlahman.com/)
-via the `Lahman` R package, licensed under
-[CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/).
-Any derivative work must carry the same attribution and license.
+`lahmanTools` is a tooling package — it does not bundle third-party data.
+All data is fetched at runtime from the sources below. When you publish
+analysis that uses these datasets, your attribution obligations depend on
+the source license.
+
+| Source | License | Obligation |
+|--------|---------|------------|
+| [Sean Lahman Baseball Database](http://www.seanlahman.com/) | [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) | Credit Sean Lahman and carry the same license in any derivative work. |
+| [Chadwick Baseball Bureau Register](https://github.com/chadwickbureau/register) | [ODC-BY 1.0](https://opendatacommons.org/licenses/by/1.0/) | Credit the Chadwick Baseball Bureau when publishing work that uses the player ID crosswalk. |
+| [FanGraphs WAR Leaderboards](https://www.fangraphs.com) | Copyright FanGraphs | Do not redistribute the fetched data. |
+| [Baseball Savant / Statcast](https://baseballsavant.mlb.com/) | Copyright MLB Advanced Media | Do not redistribute the fetched data. |
+| USA Today / Spotrac salary data | Proprietary — ToS applies | See [`data-raw/README.md`](data-raw/README.md). Do not redistribute. |
+
+FanGraphs, Chadwick, and Statcast data are fetched via the
+[`baseballr`](https://billpetti.github.io/baseballr/) package
+(MIT, Bill Petti and contributors).
 
 ## License
 
-MIT © David Lucey · Baseball data: CC BY-SA 3.0 Sean Lahman
+MIT © David Lucey

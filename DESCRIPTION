@@ -3,9 +3,14 @@ Title: Baseball Analytics with Lahman and DuckDB
 Version: 0.1.0
 Authors@R: person("David", "Lucey", role = c("aut", "cre"),
                   email = "david@example.com")
-Description: Provides a persistent DuckDB database populated with all Lahman
-    baseball tables and supplemental MLB salary data scraped from USA Today
-    (2017+). Includes helpers to connect, rebuild, and extend the database.
+Description: Loads all Sean Lahman baseball tables (1871-2025) into a persistent
+    DuckDB database and exposes pre-built sabermetric SQL views (BattingStats,
+    PitchingStats, SalaryPerWAR, etc.). Optionally extends salary coverage to
+    2017-2025 from USA Today and Spotrac, and supplements with FanGraphs WAR
+    (1985+) and Chadwick Bureau player ID crosswalk via the baseballr package.
+    Includes write_mcp_config() to connect the database to GitHub Copilot CLI
+    or Claude via a local DuckDB MCP server. No third-party data is bundled;
+    all supplemental data is fetched at runtime.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Depends: R (>= 4.1.0)
