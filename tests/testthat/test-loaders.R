@@ -141,13 +141,13 @@ test_that("war_reliable is TRUE for position player in any era", {
   expect_true(res$war_reliable[1L])
 })
 
-test_that("war_reliable is FALSE for pitcher season before 2002", {
+test_that("war_reliable is FALSE for pitcher season before 1985", {
   con <- DBI::dbConnect(duckdb::duckdb(), ":memory:")
   on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
   stub_war_tables(con)
-  insert_batter_season(con, "smithpi01", "2002", 1999L, bat_war = 0.1)
-  # Mark as pitcher (has pitching appearances in 1999)
-  DBI::dbExecute(con, "INSERT INTO Pitching VALUES ('smithpi01', 1999, 30)")
+  insert_batter_season(con, "smithpi01", "2002", 1984L, bat_war = 0.1)
+  # Mark as pitcher (has pitching appearances in 1984)
+  DBI::dbExecute(con, "INSERT INTO Pitching VALUES ('smithpi01', 1984, 30)")
   lahmanTools:::create_war_views_(con)
 
   res <- DBI::dbGetQuery(con, "SELECT war_reliable FROM SalaryPerWAR")
@@ -155,7 +155,7 @@ test_that("war_reliable is FALSE for pitcher season before 2002", {
   expect_false(res$war_reliable[1L])
 })
 
-test_that("war_reliable is TRUE for pitcher season 2002 or later", {
+test_that("war_reliable is TRUE for pitcher season 1985 or later", {
   con <- DBI::dbConnect(duckdb::duckdb(), ":memory:")
   on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
   stub_war_tables(con)

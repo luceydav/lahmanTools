@@ -75,13 +75,8 @@ create_war_views_ <- function(con) {
 
   # SalaryPerWAR: dollars per WAR by player-season.
   #
-  # war_reliable flag:
-  #   FanGraphs pitching WAR is only available from 2002 onward.  A pitcher
-  #   with salary data before 2002 will have near-zero total_war (batting
-  #   contribution only), making dollars_per_war badly wrong for that row.
-  #   war_reliable = FALSE when the player had pitching appearances AND
-  #   yearID < 2002.  Filter WHERE war_reliable = TRUE for clean analysis.
-  #   Batting WAR is reliable for all seasons 1985+.
+  # war_reliable flag: kept for backward compatibility; now always TRUE
+  # since FanGraphs pitching WAR covers the full salary era (1985+).
   DBI::dbExecute(con, "
     CREATE OR REPLACE VIEW SalaryPerWAR AS
     WITH pitcher_seasons AS (
@@ -100,7 +95,7 @@ create_war_views_ <- function(con) {
       w.total_war,
       s.salary / NULLIF(w.total_war, 0)  AS dollars_per_war,
       era_label(s.yearID)                AS era,
-      NOT (ps.playerID IS NOT NULL AND s.yearID < 2002) AS war_reliable
+      NOT (ps.playerID IS NOT NULL AND s.yearID < 1985) AS war_reliable
     FROM SalariesAll s
     JOIN PlayerWAR w USING (playerID, yearID)
     LEFT JOIN pitcher_seasons ps USING (playerID, yearID)
@@ -265,7 +260,7 @@ load_fangraphs_war <- function(con, years = 1985:2025, overwrite = FALSE) {
   bat <- data.table::rbindlist(Filter(Negate(is.null), bat_list), fill = TRUE)
 
   message(sprintf("Fetching FanGraphs pitching WAR %d-%d...", start_yr, end_yr))
-  pit_list <- lapply(years[years >= 2002L], function(yr) {
+  pit_list <- lapply(years, function(yr) {
     tryCatch({
       d <- data.table::as.data.table(
         baseballr::fg_pitch_leaders(startseason = yr, endseason = yr, qual = 0)
@@ -280,7 +275,7 @@ load_fangraphs_war <- function(con, years = 1985:2025, overwrite = FALSE) {
   pit <- data.table::rbindlist(Filter(Negate(is.null), pit_list), fill = TRUE)
 
   if (nrow(bat) == 0L) stop("No FanGraphs batting WAR data retrieved.")
-  if (nrow(pit) == 0L) warning("No FanGraphs pitching WAR data retrieved (pitching WAR only available 2002+).")
+  if (nrow(pit) == 0L) warning("No FanGraphs pitching WAR data retrieved.")
 
   DBI::dbWriteTable(con, "FangraphsBattingWAR",  bat, overwrite = overwrite)
   DBI::dbWriteTable(con, "FangraphsPitchingWAR", pit, overwrite = overwrite)

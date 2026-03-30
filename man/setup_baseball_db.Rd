@@ -4,7 +4,15 @@
 \alias{setup_baseball_db}
 \title{Build the baseball DuckDB database}
 \usage{
-setup_baseball_db(dbdir = NULL, sal_file = NULL, overwrite = FALSE)
+setup_baseball_db(
+  dbdir = NULL,
+  sal_file = NULL,
+  spotrac_file = NULL,
+  overwrite = FALSE,
+  load_chadwick = FALSE,
+  load_war = FALSE,
+  war_years = 1985:2025
+)
 }
 \arguments{
 \item{dbdir}{Path for the output \code{baseball.duckdb} file. Defaults to the
@@ -13,23 +21,60 @@ value of the \code{LAHMANS_DBDIR} environment variable if set, otherwise
 
 \item{sal_file}{Path to the combined USA Today salary CSV produced by
 \code{\link[=scrape_salaries]{scrape_salaries()}}. When \code{NULL} (default), looks for
-\verb{salaries_*_with_playerID.csv} in the same directory as \code{dbdir}. USA
-Today data is not bundled with the package — users must run
+\verb{salaries_*_with_playerID.csv} (non-Spotrac) in the same directory as
+\code{dbdir}. USA Today data is not bundled -- users must run
 \code{\link[=scrape_salaries]{scrape_salaries()}} to obtain it.}
+
+\item{spotrac_file}{Path to the combined Spotrac salary CSV produced by
+\code{data-raw/salaries.R}. When \code{NULL} (default), looks for
+\verb{salaries_spotrac_*_with_playerID.csv} in the same directory as \code{dbdir}.
+Spotrac data is not bundled -- users must run \code{data-raw/salaries.R} to
+obtain it.}
 
 \item{overwrite}{If \code{TRUE}, drop and recreate existing tables. Default
 \code{FALSE} aborts if the file already exists.}
+
+\item{load_chadwick}{If \code{TRUE}, download the Chadwick Bureau player ID
+crosswalk via \pkg{baseballr} and create the \code{PlayerIDs} view.
+Requires an internet connection and \pkg{baseballr}.  Default \code{FALSE}.}
+
+\item{load_war}{If \code{TRUE}, fetch FanGraphs WAR leaderboards and create
+\code{PlayerWAR} and \code{SalaryPerWAR} views.  Implies \code{load_chadwick = TRUE}.
+Requires an internet connection and \pkg{baseballr}.  Default \code{FALSE}.}
+
+\item{war_years}{Integer vector of seasons to fetch for WAR data.
+Defaults to \code{1985:2025} (full salary era).}
 }
 \value{
 Invisibly returns \code{dbdir}.
 }
 \description{
-Writes all Lahman package tables plus scraped USA Today salary data into a
-persistent DuckDB file, then creates a \code{SalariesAll} view that unions both
-salary sources on a common schema.
+Writes all Lahman package tables plus scraped salary data into a persistent
+DuckDB file, then creates a \code{SalariesAll} view that unions all salary
+sources on a common schema:
+\itemize{
+\item \strong{Lahman} (\code{Salaries}): authoritative 1985–2016
+\item \strong{Spotrac} (\code{SalariesSpotrac}): player-level actuals 2017–2021
+\item \strong{USA Today} (\code{SalariesUSAToday}): player-level actuals 2022–2025
+}
+}
+\details{
+Optionally fetches supplemental data via \pkg{baseballr}:
+\itemize{
+\item \code{load_chadwick = TRUE} downloads the Chadwick Bureau player ID crosswalk
+and creates the \code{PlayerIDs} view (ODC-BY 1.0 licensed; safe to use locally).
+\item \code{load_war = TRUE} additionally fetches FanGraphs WAR leaderboards and
+creates the \code{PlayerWAR} and \code{SalaryPerWAR} views.  Implies
+\code{load_chadwick = TRUE}.  Both batting and pitching WAR are available
+from FanGraphs for the full salary era (1985+).
+}
 }
 \examples{
 \dontrun{
+# Lahman only
 setup_baseball_db()
+
+# With full WAR coverage (requires baseballr and internet)
+setup_baseball_db(load_war = TRUE, overwrite = TRUE)
 }
 }

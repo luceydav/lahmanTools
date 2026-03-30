@@ -59,3 +59,258 @@ test_that("db_query passes extra arguments to dbGetQuery", {
   result <- db_query(con, "SELECT * FROM nums ORDER BY n")
   expect_equal(nrow(result), 100L)
 })
+
+
+# --- normalise_player_name ---------------------------------------------------
+
+test_that("normalise_player_name strips asterisks", {
+  expect_equal(normalise_player_name("Harper, Bryce*"), "harper, bryce")
+})
+
+test_that("normalise_player_name strips suffixes", {
+  expect_equal(normalise_player_name("Acuna Jr., Ronald"), "acuna, ronald")
+  expect_equal(normalise_player_name("Guerrero Sr., Vladimir"), "guerrero, vladimir")
+  expect_equal(normalise_player_name("Smith III, John"), "smith, john")
+})
+
+test_that("normalise_player_name transliterates accents", {
+  expect_equal(normalise_player_name("Acu\u00f1a, Ronald"), "acuna, ronald")
+})
+
+test_that("normalise_player_name fixes UTF-8 mojibake", {
+  # "Ã³" is the mojibake for "ó" (UTF-8 bytes read as Latin-1)
+  mojibake <- "Can\u00c3\u00b3, Robinson"
+  expect_equal(normalise_player_name(mojibake), "cano, robinson")
+})
+
+test_that("normalise_player_name normalises initials", {
+  expect_equal(normalise_player_name("Martinez, J.D."), "martinez, j d")
+  expect_equal(normalise_player_name("Martinez, JD"), "martinez, j d")
+  expect_equal(normalise_player_name("Realmuto, JT"), "realmuto, j t")
+})
+
+test_that("normalise_player_name strips apostrophes", {
+  expect_equal(normalise_player_name("d'Arnaud, Travis"), "darnaud, travis")
+})
+
+test_that("normalise_player_name handles vectors", {
+  input <- c("Harper, Bryce*", "Acuna Jr., Ronald", "Smith, John")
+  result <- normalise_player_name(input)
+  expect_length(result, 3L)
+  expect_equal(result, c("harper, bryce", "acuna, ronald", "smith, john"))
+})
+
+
+# --- match_player_ids --------------------------------------------------------
+
+# Helper to build a minimal People data.table for testing
+make_test_people <- function() {
+  data.table::data.table(
+    playerID  = c("harpebr03", "acunaro01", "martij06",
+                   "darntra01", "smithjo99"),
+    nameFirst = c("Bryce",     "Ronald",    "J. D.",
+                   "Travis",    "John"),
+    nameLast  = c("Harper",    "Acu\u00f1a", "Martinez",
+                   "d'Arnaud",  "Smith"),
+    debut     = c("2012-04-28", "2018-04-25", "2011-08-11",
+                   "2013-04-26", "2020-07-24"),
+    finalGame = c(NA,           NA,           NA,
+                   "2024-09-29", NA)
+  )
+}
+
+test_that("match_player_ids Pass 1: exact match works", {
+  people <- make_test_people()
+  sal <- data.table::data.table(
+    player = "Smith, John",
+    yearID = 2022L
+  )
+  match_player_ids(sal, people)
+  expect_equal(sal$playerID, "smithjo99")
+})
+
+test_that("match_player_ids Pass 2: normalised match catches suffixes + accents", {
+  people <- make_test_people()
+  sal <- data.table::data.table(
+    player = c("Acuna Jr., Ronald", "d'Arnaud, Travis"),
+    yearID = c(2023L, 2022L)
+  )
+  match_player_ids(sal, people)
+  expect_equal(sal$playerID, c("acunaro01", "darntra01"))
+})
+
+test_that("match_player_ids Pass 2: asterisks stripped", {
+  people <- make_test_people()
+  sal <- data.table::data.table(
+    player = "Harper, Bryce*",
+    yearID = 2023L
+  )
+  match_player_ids(sal, people)
+  expect_equal(sal$playerID, "harpebr03")
+})
+
+test_that("match_player_ids leaves truly unmatched as NA", {
+  people <- make_test_people()
+  sal <- data.table::data.table(
+    player = "Nonexistent, Player",
+    yearID = 2023L
+  )
+  match_player_ids(sal, people)
+  expect_true(is.na(sal$playerID))
+})
+
+test_that("match_player_ids Pass 3: disambiguates by year", {
+  # Two people with the same name but different eras
+  people <- data.table::data.table(
+    playerID  = c("johnjr01", "johnjr02"),
+    nameFirst = c("Junior",   "Junior"),
+    nameLast  = c("Johnson",  "Johnson"),
+    debut     = c("1990-04-01", "2018-04-01"),
+    finalGame = c("2005-09-30", NA)
+  )
+  sal <- data.table::data.table(
+    player = "Johnson, Junior",
+    yearID = 2022L
+  )
+  match_player_ids(sal, people)
+  expect_equal(sal$playerID, "johnjr02")
+})
+
+
+# --- match_player_ids Pass 4: team-constrained --------------------------------
+
+test_that("match_player_ids Pass 4a: resolves by team + last name", {
+  people <- data.table::data.table(
+    playerID  = c("garcica01", "garcica02", "smithjo01"),
+    nameFirst = c("Carlos",    "Carlos",    "John"),
+    nameLast  = c("Garcia",    "Garcia",    "Smith"),
+    debut     = c("2018-04-01", "2019-04-01", "2015-04-01"),
+    finalGame = c(NA,            NA,           NA)
+  )
+  # garcica01 is on NYN, garcica02 is on HOU
+  roster <- data.table::data.table(
+    playerID = c("garcica01", "garcica02", "smithjo01"),
+    yearID   = c(2023L, 2023L, 2023L),
+    teamID   = c("NYN", "HOU", "NYN")
+  )
+  sal <- data.table::data.table(
+    player = "Garcia, Carlos",
+    yearID = 2023L,
+    team   = "N.Y. Mets"
+  )
+  match_player_ids(sal, people, roster_dt = roster)
+  expect_equal(sal$playerID, "garcica01")
+})
+
+test_that("match_player_ids Pass 4b: disambiguates same-lastname teammates by initial", {
+  people <- data.table::data.table(
+    playerID  = c("smithal01", "smithbo01"),
+    nameFirst = c("Alex",      "Bob"),
+    nameLast  = c("Smith",     "Smith"),
+    debut     = c("2020-04-01", "2019-04-01"),
+    finalGame = c(NA, NA)
+  )
+  roster <- data.table::data.table(
+    playerID = c("smithal01", "smithbo01"),
+    yearID   = c(2023L, 2023L),
+    teamID   = c("NYA", "NYA")
+  )
+  sal <- data.table::data.table(
+    player = "Smith, Alex",
+    yearID = 2023L,
+    team   = "N.Y. Yankees"
+  )
+  match_player_ids(sal, people, roster_dt = roster)
+  expect_equal(sal$playerID, "smithal01")
+})
+
+test_that("match_player_ids Pass 4: uses teamID column when present", {
+  people <- data.table::data.table(
+    playerID  = c("jonesad01", "jonesad02"),
+    nameFirst = c("Adam",      "Adam"),
+    nameLast  = c("Jones",     "Jones"),
+    debut     = c("2016-04-01", "2020-04-01"),
+    finalGame = c(NA, NA)
+  )
+  roster <- data.table::data.table(
+    playerID = c("jonesad01", "jonesad02"),
+    yearID   = c(2023L, 2023L),
+    teamID   = c("BAL", "SFN")
+  )
+  # When teamID is already present, should skip team_name_map() lookup
+  sal <- data.table::data.table(
+    player = "Jones, Adam",
+    yearID = 2023L,
+    teamID = "SFN"
+  )
+  match_player_ids(sal, people, roster_dt = roster)
+  expect_equal(sal$playerID, "jonesad02")
+})
+
+test_that("match_player_ids Pass 4: leaves unmatched when player not on team roster", {
+  # Two active John Does -- ambiguous in Pass 1-3
+  # Neither is on NYN roster, so Pass 4 also fails
+  people <- data.table::data.table(
+    playerID  = c("doejn01", "doejn02"),
+    nameFirst = c("John",    "John"),
+    nameLast  = c("Doe",     "Doe"),
+    debut     = c("2015-04-01", "2018-04-01"),
+    finalGame = c(NA, NA)
+  )
+  roster <- data.table::data.table(
+    playerID = c("doejn01", "doejn02"),
+    yearID   = c(2023L, 2023L),
+    teamID   = c("BOS", "HOU")
+  )
+  sal <- data.table::data.table(
+    player = "Doe, John",
+    yearID = 2023L,
+    team   = "N.Y. Mets"
+  )
+  match_player_ids(sal, people, roster_dt = roster)
+  expect_true(is.na(sal$playerID))
+})
+
+
+# --- team_name_map -----------------------------------------------------------
+
+test_that("team_name_map returns expected structure", {
+  tmap <- team_name_map()
+  expect_s3_class(tmap, "data.table")
+  expect_true(all(c("team_name", "teamID") %in% names(tmap)))
+  expect_true(nrow(tmap) > 0L)
+})
+
+test_that("team_name_map covers all 30 current MLB franchises", {
+  tmap <- team_name_map()
+  current_30 <- c("ARI", "ATL", "BAL", "BOS", "CHN", "CHA", "CIN", "CLE",
+                   "COL", "DET", "HOU", "KCA", "LAA", "LAN", "MIA", "MIL",
+                   "MIN", "NYN", "NYA", "OAK", "PHI", "PIT", "SDN", "SFN",
+                   "SEA", "SLN", "TBA", "TEX", "TOR", "WAS")
+  for (tid in current_30) {
+    expect_true(tid %in% tmap$teamID,
+                label = paste("missing franchise:", tid))
+  }
+})
+
+test_that("team_name_map has no duplicate team_name entries", {
+  tmap <- team_name_map()
+  dupes <- tmap$team_name[duplicated(tmap$team_name)]
+  expect_true(length(dupes) == 0L,
+              label = paste("duplicate aliases:", toString(dupes)))
+})
+
+test_that("team_name_map maps common abbreviations correctly", {
+  tmap <- team_name_map()
+  expect_equal(tmap[team_name == "NYM", teamID], "NYN")
+  expect_equal(tmap[team_name == "NYY", teamID], "NYA")
+  expect_equal(tmap[team_name == "CHC", teamID], "CHN")
+  expect_equal(tmap[team_name == "CHW", teamID], "CHA")
+  expect_equal(tmap[team_name == "LAD", teamID], "LAN")
+  expect_equal(tmap[team_name == "STL", teamID], "SLN")
+  expect_equal(tmap[team_name == "KC",  teamID], "KCA")
+  expect_equal(tmap[team_name == "TB",  teamID], "TBA")
+  expect_equal(tmap[team_name == "SF",  teamID], "SFN")
+  expect_equal(tmap[team_name == "SD",  teamID], "SDN")
+  expect_equal(tmap[team_name == "WSH", teamID], "WAS")
+})

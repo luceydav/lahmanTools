@@ -110,32 +110,30 @@ if (length(spotrac_files) == 0L) stop("No Spotrac CSV files found in ", output_d
 all_sal <- data.table::rbindlist(lapply(spotrac_files, data.table::fread), fill = TRUE)
 
 # Reformat player column to "Last, First" to match Lahman People format
-# Spotrac stores as "First Last" — reverse the order
+# Spotrac stores as "First Last" -- reverse the order
+# Strip suffixes (Jr., Sr., II, III) BEFORE reversing to avoid "Jr., Jackie Bradley"
+suffix_pat <- "\\s+(Jr\\.?|Sr\\.?|II|III|IV)$"
+all_sal[, player := gsub(suffix_pat, "", player)]
 name_parts <- strsplit(all_sal$player, "\\s+", perl = TRUE)
-all_sal[, player_lahman := vapply(name_parts, function(p) {
+all_sal[, player := vapply(name_parts, function(p) {
   if (length(p) < 2L) return(p[[1L]])
   paste0(p[[length(p)]], ", ", paste(p[-length(p)], collapse = " "))
 }, character(1L))]
 
 people <- data.table::as.data.table(Lahman::People)
-people[, player_lahman := paste0(nameLast, ", ", nameFirst)]
+match_player_ids(all_sal, people)
 
-sal_linked <- merge(
-  all_sal, people[, .(playerID, player_lahman)],
-  by = "player_lahman", all.x = TRUE
-)
+match_pct <- mean(!is.na(all_sal$playerID)) * 100
+message(sprintf("Final match rate: %.1f%% of %d rows", match_pct, nrow(all_sal)))
 
-match_pct <- mean(!is.na(sal_linked$playerID)) * 100
-message(sprintf("Matched: %.1f%% of %d rows", match_pct, nrow(sal_linked)))
-
-yr_range    <- range(sal_linked$yearID, na.rm = TRUE)
+yr_range    <- range(all_sal$yearID, na.rm = TRUE)
 out_combined <- file.path(
   output_dir,
   sprintf("salaries_spotrac_%d_%d_with_playerID.csv", yr_range[[1L]], yr_range[[2L]])
 )
-data.table::fwrite(sal_linked[, player_lahman := NULL], out_combined)
+data.table::fwrite(all_sal, out_combined)
 data.table::fwrite(
-  unique(sal_linked[is.na(playerID), .(player)]),
+  unique(all_sal[is.na(playerID), .(player)]),
   file.path(output_dir, "unmatched_spotrac.csv")
 )
 

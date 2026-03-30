@@ -13,17 +13,41 @@ create_stats_views(con)
 Invisibly returns \code{con}.
 }
 \description{
-Adds three views that extend the raw Lahman tables with derived rate
-statistics. The raw tables are never modified.
+Adds views and a scalar SQL macro that extend the raw Lahman tables with
+derived statistics. The raw tables are never modified.
 }
 \details{
-\tabular{lll}{
+\strong{Per-player views} (one row per player-year-stint-team):\tabular{lll}{
    View \tab Base table \tab Key metrics added \cr
    \code{BattingStats} \tab \code{Batting} \tab PA, AVG, OBP, SLG, OPS, ISO, BABIP, BB\%, K\% \cr
    \code{PitchingStats} \tab \code{Pitching} \tab IP, WHIP, K/9, BB/9, HR/9, H/9, K/BB, FIP, FIP_constant, Win\% \cr
    \code{FieldingStats} \tab \code{Fielding} \tab FPCT, RF/9, RF/G \cr
 }
 
+
+\strong{Analytical views} (pre-built patterns used across analysis queries):\tabular{lll}{
+   View \tab Base tables \tab Description \cr
+   \code{PlayerAcquisitionType} \tab \code{Batting}, \code{Pitching}, \code{People} \tab One row per player-team; classifies as \code{homegrown}, \code{young_acq}, or \code{veteran_acq} \cr
+   \code{LeagueMedianSalary} \tab \code{SalariesAll} \tab League-wide median and mean salary by season; use for relative-salary normalisation \cr
+   \code{TeamPayroll} \tab \code{SalariesAll} \tab Total payroll, player count, median and max salary by team-season \cr
+}
+
+
+\strong{Scalar macro:}\tabular{lll}{
+   Macro \tab Argument \tab Returns \cr
+   \code{era_label(yr)} \tab \code{INTEGER} year \tab \code{'Pre-Moneyball'} (1998-2002), \code{'Moneyball'} (2003-2011), \code{'Big Data'} (2012+), or \code{NULL} \cr
+}
+
+
+Use \code{era_label(yearID)} in any SQL query instead of repeating the \code{CASE}
+block. Example: \verb{SELECT era_label(yearID) AS era, ... FROM BattingStats}.
+
+\strong{Acquisition type} (\code{PlayerAcquisitionType.acq_type}):
+\itemize{
+\item \code{homegrown} — player's first MLB season equals first season with this team
+\item \code{young_acq} — joined team after MLB debut, age on arrival < 26
+\item \code{veteran_acq} — joined team after MLB debut, age on arrival >= 26
+}
 
 \strong{FIP constant} is derived per \code{yearID + lgID} by aggregating the \code{Teams}
 table (\code{lgERA - (13*lgHR + 3*lgBB - 2*lgSO) / lgIP}), so it correctly

@@ -12,9 +12,8 @@
 #'   and creates the `PlayerIDs` view (ODC-BY 1.0 licensed; safe to use locally).
 #' - `load_war = TRUE` additionally fetches FanGraphs WAR leaderboards and
 #'   creates the `PlayerWAR` and `SalaryPerWAR` views.  Implies
-#'   `load_chadwick = TRUE`.  Pitching WAR is available from FanGraphs from
-#'   2002 onward only; `SalaryPerWAR` includes a `war_reliable` flag to mark
-#'   pre-2002 pitcher rows where WAR values are incomplete.
+#'   `load_chadwick = TRUE`.  Both batting and pitching WAR are available
+#'   from FanGraphs for the full salary era (1985+).
 #'
 #' @param dbdir Path for the output `baseball.duckdb` file. Defaults to the
 #'   value of the `LAHMANS_DBDIR` environment variable if set, otherwise
@@ -38,8 +37,7 @@
 #'   `PlayerWAR` and `SalaryPerWAR` views.  Implies `load_chadwick = TRUE`.
 #'   Requires an internet connection and \pkg{baseballr}.  Default `FALSE`.
 #' @param war_years Integer vector of seasons to fetch for WAR data.
-#'   Defaults to `1985:2025` (full salary era).  Pitching WAR before 2002 is
-#'   not available from FanGraphs; see `SalaryPerWAR.war_reliable`.
+#'   Defaults to `1985:2025` (full salary era).
 #'
 #' @return Invisibly returns `dbdir`.
 #' @export

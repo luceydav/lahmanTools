@@ -91,21 +91,18 @@ scrape_salaries <- function(years      = 2017:2025,
 
   # -- Join to Lahman playerID --------------------------------------------------
   people <- data.table::as.data.table(Lahman::People)
-  people[, player := paste0(nameLast, ", ", nameFirst)]
+  match_player_ids(all_salaries, people)
 
-  sal_linked <- merge(all_salaries, people[, .(playerID, player)],
-                      by = "player", all.x = TRUE)
+  match_pct <- mean(!is.na(all_salaries$playerID)) * 100
+  message(sprintf("Final match rate: %.1f%% of %d rows", match_pct, nrow(all_salaries)))
 
-  match_pct <- mean(!is.na(sal_linked$playerID)) * 100
-  message(sprintf("Matched: %.1f%% of %d rows", match_pct, nrow(sal_linked)))
-
-  yr_range    <- range(sal_linked$yearID, na.rm = TRUE)
+  yr_range    <- range(all_salaries$yearID, na.rm = TRUE)
   out_combined <- file.path(
     output_dir,
     sprintf("salaries_%d_%d_with_playerID.csv", yr_range[1], yr_range[2])
   )
-  data.table::fwrite(sal_linked, out_combined)
-  data.table::fwrite(unique(sal_linked[is.na(playerID), .(player)]),
+  data.table::fwrite(all_salaries, out_combined)
+  data.table::fwrite(unique(all_salaries[is.na(playerID), .(player)]),
                      file.path(output_dir, "unmatched_players.csv"))
 
   message("Done. Combined file: ", out_combined)

@@ -84,6 +84,20 @@ rsync -a /tmp/lahmans-git-work/.git/objects/ $PROJ/.git/objects/
 
 `git checkout` in the project dir will fail — files are correct but the local branch pointer may lag.
 
+## Interactive R Sessions (Analysis Development)
+
+When developing analysis scripts or iterating on charts, use an **interactive R session** instead of re-running the full script each time:
+
+1. Start R in async mode: `bash mode="async" command="R --no-save"`
+2. Source shared setup (DB connection, libraries) once
+3. Send individual code blocks via `write_bash` to iterate on specific charts or queries
+4. Use the `view` tool on saved PNG files to inspect chart output visually
+5. Only assemble the final `.R` script once the individual pieces are working
+
+This avoids the 60-90 second penalty of re-running a full analysis script on every change and enables tight visual feedback loops.
+
+**DuckDB CLI for ad-hoc queries:** Use `duckdb ~/Documents/Data/baseball/baseball.duckdb` for quick schema checks (`DESCRIBE`, `SUMMARIZE`) rather than writing throwaway R code.
+
 ## R CMD Check
 
 - Non-ASCII characters (em-dashes, box-drawing) in R source cause WARNING — use ASCII `--`.
