@@ -10,8 +10,8 @@ The design choice matters at scale: DuckDB executes columnar SQL directly on the
 
 ## Data model
 
-20 Lahman tables loaded into DuckDB, colour-coded by functional group.
-Arrows show primary-key → foreign-key relationships.
+All 27 Lahman tables are loaded into DuckDB. The diagram shows the 20 primary tables,
+colour-coded by functional group, with arrows for primary-key → foreign-key relationships.
 
 ![lahmanTools schema](man/figures/lahmanTools_schema.svg)
 
@@ -27,6 +27,34 @@ Arrows show primary-key → foreign-key relationships.
 | ⚫ Grey | Lookups | `Parks`, `HomeGames`, `SeriesPost` |
 
 To regenerate after schema changes: `Rscript analysis/schema_dm.R` (requires `dm`, `DiagrammeR`, `DiagrammeRsvg`).
+
+### Derived views and macros
+
+Eight views and one scalar macro are created by `setup_baseball_db()`.
+Query them directly via SQL — no R wrangling required for the common patterns.
+
+**Per-player stats views** (one row per player-year-stint-team):
+
+| View | Base tables | Key metrics |
+|------|-------------|-------------|
+| `BattingStats` | `Batting` | PA, AVG, OBP, SLG, OPS, ISO, BABIP, BB%, K% |
+| `PitchingStats` | `Pitching`, `Teams` | IP, ERA, WHIP, K/9, BB/9, HR/9, FIP, K/BB |
+| `FieldingStats` | `Fielding` | FPCT, RF/9, RF/G by position |
+| `SalariesAll` | `Salaries`, `SalariesSpotrac`, `SalariesUSAToday` | Lahman (1985-2016) + Spotrac (2017-2021) + USA Today (2022-2025); filter `is_actual = TRUE` for confirmed figures |
+
+**Analytical views** (pre-built patterns for multi-era salary analysis):
+
+| View | Description |
+|------|-------------|
+| `PlayerAcquisitionType` | One row per player-team; `acq_type` is `homegrown`, `young_acq` (arrived pre-26), or `veteran_acq` |
+| `LeagueMedianSalary` | League-wide `med_sal`, `avg_sal`, `n_players` by season — use for `salary / med_sal` normalisation |
+| `TeamPayroll` | `total_salary`, `n_players`, `median_salary`, `max_salary` by team-season |
+
+**Scalar macro** (callable in any SQL query):
+
+| Macro | Usage | Returns |
+|-------|-------|---------|
+| `era_label(yr)` | `SELECT era_label(yearID) AS era …` | `'Pre-Moneyball'` / `'Moneyball'` / `'Big Data'` / `NULL` |
 
 ## Requirements
 
@@ -70,6 +98,43 @@ setup_baseball_db(
 )
 ```
 
+To add WAR-based salary efficiency analysis, pass `load_war = TRUE`. This requires
+[`baseballr`](https://cran.r-project.org/package=baseballr) and an internet connection.
+The Chadwick Bureau crosswalk (ODC-BY 1.0) and FanGraphs WAR leaderboards are fetched
+at runtime to your local database — no data is bundled with the package:
+
+```r
+# install.packages("baseballr")
+setup_baseball_db(load_war = TRUE, overwrite = TRUE)
+```
+
+This adds three supplemental tables and two derived views:
+
+| Added | Type | Description |
+|-------|------|-------------|
+| `ChadwickIDs` | Table | Chadwick Bureau player ID crosswalk (ODC-BY 1.0) |
+| `FangraphsBattingWAR` | Table | FanGraphs batter WAR leaderboard (1871–present) |
+| `FangraphsPitchingWAR` | Table | FanGraphs pitcher WAR leaderboard (2002–present) |
+| `PlayerIDs` | View | Lahman `playerID` joined to MLBAM, FanGraphs, Retrosheet, and BBREF IDs |
+| `PlayerWAR` | View | `bat_war` + `pit_war` + `total_war` per player-season |
+| `SalaryPerWAR` | View | `dollars_per_war` by player-season; includes `war_reliable` flag |
+
+> **`war_reliable` flag:** FanGraphs pitching WAR is only available from 2002 onward.
+> Pre-2002 pitcher rows in `SalaryPerWAR` will have near-zero `total_war` (batting
+> contribution only), making `dollars_per_war` misleading. Filter
+> `WHERE war_reliable = TRUE` for trustworthy analysis. Batting WAR is reliable for
+> all seasons 1985+.
+
+Loaders can also be run independently on an existing open connection:
+
+```r
+con <- connect_baseball_db(read_only = FALSE)
+load_chadwick_ids(con)           # Chadwick crosswalk only (ODC-BY 1.0)
+load_fangraphs_war(con)          # WAR + SalaryPerWAR (requires Chadwick first)
+load_statcast(con, years = 2023) # Statcast pitch data (2015+; ~700 MB/season)
+DBI::dbDisconnect(con, shutdown = TRUE)
+```
+
 ## Usage
 
 ```r
@@ -78,7 +143,7 @@ library(lahmanTools)
 con <- connect_baseball_db()          # read-only by default
 on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
 
-DBI::dbListTables(con)                # all 27 Lahman tables + 5 views
+DBI::dbListTables(con)                # all 27 Lahman tables + 8 views (more with load_war)
 ```
 
 ### Example: does an elite strikeout rotation pay off?
@@ -136,15 +201,69 @@ db_query(con, "
 ")
 ```
 
-## Views
+## AI-assisted querying (MCP)
 
-| View | Base tables | Key metrics |
-|------|-------------|-------------|
-| `BattingStats` | `Batting` | PA, AVG, OBP, SLG, OPS, ISO, BABIP, BB%, K% |
-| `PitchingStats` | `Pitching`, `Teams` | IP, ERA, WHIP, K/9, BB/9, HR/9, FIP, K/BB |
-| `FieldingStats` | `Fielding` | FPCT, RF/9, RF/G by position |
-| `SalariesAll` | `Salaries`, `SalariesUSAToday` | Lahman (≤ 2016) + USA Today (2017+); AAV imputation for multi-year contracts |
-| `TeamPayroll` | `SalariesAll` | Total and per-position payroll by team-season |
+If you use [GitHub Copilot CLI](https://docs.github.com/en/copilot/using-github-copilot/using-github-copilot-in-the-command-line) or [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview), you can connect either tool to `baseball.duckdb` via a local [DuckDB MCP server](https://github.com/alexmacy/duckdb-mcp-server). The AI agent writes and executes SQL against your live database in response to plain-English questions — no R session required.
+
+### Setup
+
+```bash
+uv tool install duckdb-mcp-server   # or: pip install duckdb-mcp-server
+```
+
+Then let the package generate the config for you -- it resolves paths to
+absolute form (required by Python-based MCP servers) and handles merging
+with any existing config:
+
+```r
+# Preview the JSON that would be written
+write_mcp_config()
+
+# Write to ~/.copilot/mcp-config.json when satisfied
+write_mcp_config(dry_run = FALSE)
+```
+
+Or write it manually -- replace the paths with your actual binary location
+(`which duckdb-mcp-server`) and database path:
+
+```json
+{
+  "mcpServers": {
+    "baseball": {
+      "command": "/Users/you/.local/bin/duckdb-mcp-server",
+      "args": ["--db-path", "/path/to/baseball.duckdb", "--readonly"]
+    }
+  }
+}
+```
+
+`--readonly` is required -- omitting it allows an AI agent to mutate or drop tables.
+
+### What an interaction looks like
+
+Once configured, you ask questions in the chat interface and the agent translates them to SQL automatically:
+
+```
+User: Which era had the best payroll efficiency — wins per dollar spent?
+
+Agent: Querying SalariesAll JOIN Teams, grouping by era...
+
+  era            avg_wins_per_1M_USD
+  Pre-Moneyball  8.3
+  Moneyball      11.2
+  Big Data        5.7
+
+The Moneyball era (2003-2011) had the best efficiency. 2012 was the
+single most efficient season at 23.5 wins/$1M. Efficiency has declined
+steadily as salary inflation has outpaced on-field wins.
+```
+
+The full schema is available — player careers, team trends, era comparisons,
+salary analysis across the three-source `SalariesAll` view. Multi-table joins
+and window functions work as expected.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for full setup instructions including
+config file locations for different AI tools.
 
 ## Package structure
 
@@ -153,6 +272,7 @@ R/
   connect.R      # connect_baseball_db()  — open DuckDB connection
   setup_db.R     # setup_baseball_db()    — build / rebuild the database
   stats_views.R  # create_stats_views()   — register sabermetric SQL views
+  loaders.R      # load_chadwick_ids(), load_fangraphs_war(), load_statcast()
   scrape.R       # scrape_salaries()      — fetch USA Today salary data
   utils.R        # db_query(), dt_factors_to_char(), clean_names()
   globals.R      # globalVariables() declarations

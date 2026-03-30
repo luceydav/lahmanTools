@@ -1,5 +1,8 @@
 # Copilot Instructions
 
+<!-- Mirrors .github/copilot-instructions.md for cross-tool AI agent coverage (Claude Code, Cursor, Codex CLI).
+     Keep both files in sync when updating. -->
+
 ## Project
 
 `lahmanTools` is an R package for baseball sabermetric analysis. Stack: **DuckDB** (SQL engine) + **data.table** (R manipulation) + **base R** — no tidyverse. Analysis scripts live in `analysis/` (gitignored). `baseball.duckdb` is never committed; rebuild with `setup_baseball_db()`.

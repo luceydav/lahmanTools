@@ -7,33 +7,56 @@
 #' - **Spotrac** (`SalariesSpotrac`): player-level actuals 2017–2021
 #' - **USA Today** (`SalariesUSAToday`): player-level actuals 2022–2025
 #'
+#' Optionally fetches supplemental data via \pkg{baseballr}:
+#' - `load_chadwick = TRUE` downloads the Chadwick Bureau player ID crosswalk
+#'   and creates the `PlayerIDs` view (ODC-BY 1.0 licensed; safe to use locally).
+#' - `load_war = TRUE` additionally fetches FanGraphs WAR leaderboards and
+#'   creates the `PlayerWAR` and `SalaryPerWAR` views.  Implies
+#'   `load_chadwick = TRUE`.  Both batting and pitching WAR are available
+#'   from FanGraphs for the full salary era (1985+).
+#'
 #' @param dbdir Path for the output `baseball.duckdb` file. Defaults to the
 #'   value of the `LAHMANS_DBDIR` environment variable if set, otherwise
 #'   `~/Documents/Data/baseball/baseball.duckdb`.
 #' @param sal_file Path to the combined USA Today salary CSV produced by
 #'   [scrape_salaries()]. When `NULL` (default), looks for
 #'   `salaries_*_with_playerID.csv` (non-Spotrac) in the same directory as
-#'   `dbdir`. USA Today data is not bundled — users must run
+#'   `dbdir`. USA Today data is not bundled -- users must run
 #'   [scrape_salaries()] to obtain it.
 #' @param spotrac_file Path to the combined Spotrac salary CSV produced by
 #'   `data-raw/salaries.R`. When `NULL` (default), looks for
 #'   `salaries_spotrac_*_with_playerID.csv` in the same directory as `dbdir`.
-#'   Spotrac data is not bundled — users must run `data-raw/salaries.R` to
+#'   Spotrac data is not bundled -- users must run `data-raw/salaries.R` to
 #'   obtain it.
 #' @param overwrite If `TRUE`, drop and recreate existing tables. Default
 #'   `FALSE` aborts if the file already exists.
+#' @param load_chadwick If `TRUE`, download the Chadwick Bureau player ID
+#'   crosswalk via \pkg{baseballr} and create the `PlayerIDs` view.
+#'   Requires an internet connection and \pkg{baseballr}.  Default `FALSE`.
+#' @param load_war If `TRUE`, fetch FanGraphs WAR leaderboards and create
+#'   `PlayerWAR` and `SalaryPerWAR` views.  Implies `load_chadwick = TRUE`.
+#'   Requires an internet connection and \pkg{baseballr}.  Default `FALSE`.
+#' @param war_years Integer vector of seasons to fetch for WAR data.
+#'   Defaults to `1985:2025` (full salary era).
 #'
 #' @return Invisibly returns `dbdir`.
 #' @export
 #'
 #' @examples
 #' \dontrun{
+#' # Lahman only
 #' setup_baseball_db()
+#'
+#' # With full WAR coverage (requires baseballr and internet)
+#' setup_baseball_db(load_war = TRUE, overwrite = TRUE)
 #' }
 setup_baseball_db <- function(dbdir         = NULL,
                                sal_file      = NULL,
                                spotrac_file  = NULL,
-                               overwrite     = FALSE) {
+                               overwrite     = FALSE,
+                               load_chadwick = FALSE,
+                               load_war      = FALSE,
+                               war_years     = 1985:2025) {
   if (is.null(dbdir)) {
     dbdir <- Sys.getenv(
       "LAHMANS_DBDIR",
@@ -154,10 +177,16 @@ setup_baseball_db <- function(dbdir         = NULL,
             WHEN regexp_extract(years, '-(\\d{4})\\)', 1) <> ''
               THEN TRY_CAST(regexp_extract(years, '-(\\d{4})\\)', 1) AS INTEGER)
             WHEN regexp_extract(years, '-(\\d{2})\\)', 1) <> ''
-              THEN TRY_CAST(
-                     left(regexp_extract(years, '\\((\\d{4})-', 1), 2) ||
-                     regexp_extract(years, '-(\\d{2})\\)', 1)
-                   AS INTEGER)
+              -- Century-safe: base century from c_start + 100 if 2-digit end wraps
+              THEN (
+                     (TRY_CAST(regexp_extract(years, '\\((\\d{4})-', 1) AS INTEGER) / 100) * 100
+                     + TRY_CAST(regexp_extract(years, '-(\\d{2})\\)', 1) AS INTEGER)
+                     + CASE
+                         WHEN TRY_CAST(regexp_extract(years, '-(\\d{2})\\)', 1) AS INTEGER)
+                                < TRY_CAST(regexp_extract(years, '\\((\\d{4})-', 1) AS INTEGER) % 100
+                         THEN 100 ELSE 0
+                       END
+                   )::INTEGER
           END                                                               AS c_end
         FROM SalariesUSAToday
         WHERE playerID IS NOT NULL
@@ -260,12 +289,31 @@ setup_baseball_db <- function(dbdir         = NULL,
       usatoday_union
     ))
     message(sprintf("  %-25s (view)", "SalariesAll"))
+  } else {
+    # Lahman Salaries (1985-2016) only -- fallback when no supplemental files loaded
+    DBI::dbExecute(con, "
+      CREATE OR REPLACE VIEW SalariesAll AS
+      SELECT playerID, yearID, teamID, lgID,
+             salary::DOUBLE AS salary,
+             'lahman'       AS source,
+             TRUE           AS is_actual
+      FROM   Salaries
+    ")
+    message(sprintf("  %-25s (view, Lahman only -- no supplemental salary files)", "SalariesAll"))
   }
 
   # ── Stats views ──────────────────────────────────────────────────────────────
   create_stats_views(con)
 
+  # ── Optional supplemental loaders ────────────────────────────────────────────
+  # load_war implies load_chadwick (WAR join requires the Chadwick crosswalk)
+  if (load_war && !load_chadwick) load_chadwick <- TRUE
+  if (load_chadwick) load_chadwick_ids(con, overwrite = overwrite)
+  if (load_war)      load_fangraphs_war(con, years = war_years, overwrite = overwrite)
+
   n <- length(DBI::dbListTables(con))
   message(sprintf("\nDone. %d tables/views written to %s", n, dbdir))
+  message("Tip: run write_mcp_config() to configure AI tools (Copilot CLI, Claude Code) ",
+          "to query this database.")
   invisible(dbdir)
 }

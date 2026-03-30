@@ -201,7 +201,45 @@ test_that("SalariesAll normalises USA Today team names to Lahman teamIDs", {
   expect_false(any(raw_names %in% teams_in_view))
 })
 
-# ── Full-range coverage: SalariesAll joins to Teams ───────────────────────────
+# ── Century-crossing contract year: "2 (1999-01)" must expand to 2001 ─────────
+
+test_that("SalariesAll expands century-crossing 2-digit end years correctly", {
+  # A contract "2 (1999-01)" has c_start=1999, c_end should be 2001 (not 1901).
+  # The naive left(c_start_str, 2) || "01" = "1901" bug would drop this row.
+  usa_rows <- list(
+    playerID       = "century_p1",
+    yearID         = 1999L,
+    team           = "Yankees",
+    salary         = 1e7,
+    average_annual = 1e7,
+    years          = "2 (1999-01)"
+  )
+  usa_file <- make_usatoday_csv(usa_rows)
+  on.exit(unlink(usa_file), add = TRUE)
+
+  db_path <- tempfile(fileext = ".duckdb")
+  on.exit(unlink(db_path), add = TRUE)
+
+  suppressWarnings(
+    setup_baseball_db(dbdir = db_path, sal_file = usa_file, overwrite = TRUE)
+  )
+
+  con <- DBI::dbConnect(duckdb::duckdb(), dbdir = db_path, read_only = TRUE)
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
+
+  # Contract should produce imputed rows for both 1999 and 2000 (is_actual=FALSE)
+  # or be present as actual for the scraped year (1999)
+  years_present <- db_query(con,
+    "SELECT DISTINCT yearID FROM SalariesAll
+     WHERE playerID = 'century_p1' ORDER BY yearID"
+  )$yearID
+
+  # The contract spans 1999-2001; at minimum year 2000 must appear (imputed AAV)
+  # which only happens if c_end was correctly parsed as 2001, not dropped as 1901
+  expect_true(2000L %in% years_present,
+    info = "century-crossing contract (1999-01) dropped — c_end parsed as 1901 instead of 2001")
+})
+
 
 test_that("SalariesAll teamIDs join cleanly to Teams for 2017-2023", {
   skip_on_ci()

@@ -1,13 +1,37 @@
 #' Create per-season stats views in the baseball DuckDB database
 #'
-#' Adds three views that extend the raw Lahman tables with derived rate
-#' statistics. The raw tables are never modified.
+#' Adds views and a scalar SQL macro that extend the raw Lahman tables with
+#' derived statistics. The raw tables are never modified.
+#'
+#' **Per-player views** (one row per player-year-stint-team):
 #'
 #' | View | Base table | Key metrics added |
 #' |------|------------|-------------------|
 #' | `BattingStats`  | `Batting`  | PA, AVG, OBP, SLG, OPS, ISO, BABIP, BB%, K% |
 #' | `PitchingStats` | `Pitching` | IP, WHIP, K/9, BB/9, HR/9, H/9, K/BB, FIP, FIP_constant, Win% |
 #' | `FieldingStats` | `Fielding` | FPCT, RF/9, RF/G |
+#'
+#' **Analytical views** (pre-built patterns used across analysis queries):
+#'
+#' | View | Base tables | Description |
+#' |------|-------------|-------------|
+#' | `PlayerAcquisitionType` | `Batting`, `Pitching`, `People` | One row per player-team; classifies as `homegrown`, `young_acq`, or `veteran_acq` |
+#' | `LeagueMedianSalary` | `SalariesAll` | League-wide median and mean salary by season; use for relative-salary normalisation |
+#' | `TeamPayroll` | `SalariesAll` | Total payroll, player count, median and max salary by team-season |
+#'
+#' **Scalar macro:**
+#'
+#' | Macro | Argument | Returns |
+#' |-------|----------|---------|
+#' | `era_label(yr)` | `INTEGER` year | `'Pre-Moneyball'` (1998-2002), `'Moneyball'` (2003-2011), `'Big Data'` (2012+), or `NULL` |
+#'
+#' Use `era_label(yearID)` in any SQL query instead of repeating the `CASE`
+#' block. Example: `SELECT era_label(yearID) AS era, ... FROM BattingStats`.
+#'
+#' **Acquisition type** (`PlayerAcquisitionType.acq_type`):
+#' - `homegrown` — player's first MLB season equals first season with this team
+#' - `young_acq` — joined team after MLB debut, age on arrival < 26
+#' - `veteran_acq` — joined team after MLB debut, age on arrival >= 26
 #'
 #' **FIP constant** is derived per `yearID + lgID` by aggregating the `Teams`
 #' table (`lgERA - (13*lgHR + 3*lgBB - 2*lgSO) / lgIP`), so it correctly
@@ -183,6 +207,101 @@ create_stats_views <- function(con) {
     FROM Fielding
   ")
   message(sprintf("  %-25s (view)", "FieldingStats"))
+
+  # ── era_label macro ──────────────────────────────────────────────────────────
+  # Scalar macro so every analysis query can write era_label(yearID) rather than
+  # repeating the same CASE block.  Returns NULL for years outside 1998-present.
+  DBI::dbExecute(con, "
+    CREATE OR REPLACE MACRO era_label(yr) AS
+      CASE
+        WHEN yr BETWEEN 1998 AND 2002 THEN 'Pre-Moneyball'
+        WHEN yr BETWEEN 2003 AND 2011 THEN 'Moneyball'
+        WHEN yr >= 2012              THEN 'Big Data'
+        ELSE NULL
+      END
+  ")
+  message(sprintf("  %-25s (macro)", "era_label(yr)"))
+
+  # ── PlayerAcquisitionType ────────────────────────────────────────────────────
+  # Classifies every player-team first appearance as homegrown, young_acq, or
+  # veteran_acq by comparing the player's MLB debut year to their first year
+  # with this specific team and their age on arrival.
+  #   homegrown   — debut year == first year with this team
+  #   young_acq   — arrived after debut, age on arrival < 26
+  #   veteran_acq — arrived after debut, age on arrival >= 26
+  # Note: "first MLB year" is determined from Batting + Pitching combined, so
+  # pitchers who never batted are classified correctly.
+  DBI::dbExecute(con, "
+    CREATE OR REPLACE VIEW PlayerAcquisitionType AS
+    WITH all_apps AS (
+      SELECT playerID, yearID, teamID FROM Batting
+      UNION ALL
+      SELECT playerID, yearID, teamID FROM Pitching
+    ),
+    mlb_debut AS (
+      SELECT playerID, MIN(yearID) AS mlb_debut_year
+      FROM all_apps
+      GROUP BY playerID
+    ),
+    first_with_team AS (
+      SELECT playerID, teamID, MIN(yearID) AS first_team_year
+      FROM all_apps
+      GROUP BY playerID, teamID
+    )
+    SELECT
+      fwt.playerID,
+      fwt.teamID,
+      fwt.first_team_year,
+      md.mlb_debut_year,
+      pe.birthYear,
+      fwt.first_team_year - pe.birthYear     AS age_on_arrival,
+      CASE
+        WHEN fwt.first_team_year = md.mlb_debut_year                    THEN 'homegrown'
+        WHEN fwt.first_team_year > md.mlb_debut_year
+             AND fwt.first_team_year - pe.birthYear < 26                THEN 'young_acq'
+        ELSE                                                                 'veteran_acq'
+      END                                    AS acq_type
+    FROM first_with_team fwt
+    JOIN mlb_debut       md  USING (playerID)
+    JOIN People          pe  USING (playerID)
+  ")
+  message(sprintf("  %-25s (view)", "PlayerAcquisitionType"))
+
+  # ── LeagueMedianSalary ───────────────────────────────────────────────────────
+  # One row per season with league-wide salary distribution metrics.
+  # Use for normalising individual salaries: salary / med_sal gives relative pay.
+  # Requires SalariesAll to exist (created by setup_baseball_db()).
+  DBI::dbExecute(con, "
+    CREATE OR REPLACE VIEW LeagueMedianSalary AS
+    SELECT
+      yearID,
+      MEDIAN(salary)           AS med_sal,
+      AVG(salary)              AS avg_sal,
+      COUNT(DISTINCT playerID) AS n_players
+    FROM SalariesAll
+    WHERE is_actual = TRUE AND salary > 0
+    GROUP BY yearID
+  ")
+  message(sprintf("  %-25s (view)", "LeagueMedianSalary"))
+
+  # ── TeamPayroll ──────────────────────────────────────────────────────────────
+  # Team-season level salary aggregates.  total_salary is the primary metric;
+  # median_salary and max_salary support Gini and concentration analysis.
+  # Requires SalariesAll to exist (created by setup_baseball_db()).
+  DBI::dbExecute(con, "
+    CREATE OR REPLACE VIEW TeamPayroll AS
+    SELECT
+      yearID,
+      teamID,
+      SUM(salary)              AS total_salary,
+      COUNT(DISTINCT playerID) AS n_players,
+      MEDIAN(salary)           AS median_salary,
+      MAX(salary)              AS max_salary
+    FROM SalariesAll
+    WHERE is_actual = TRUE AND salary > 0
+    GROUP BY yearID, teamID
+  ")
+  message(sprintf("  %-25s (view)", "TeamPayroll"))
 
   invisible(con)
 }
