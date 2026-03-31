@@ -79,9 +79,17 @@ rm -rf /tmp/lahmans-git-work/.git/refs/refs 2>/dev/null || true  # remove stale 
 # git add / commit / push from /tmp/lahmans-git-work/
 rsync -a /tmp/lahmans-git-work/.git/refs/ $PROJ/.git/refs/
 rsync -a /tmp/lahmans-git-work/.git/objects/ $PROJ/.git/objects/
+# REQUIRED after every commit: reset project index to HEAD or staged changes accumulate
+cd $PROJ && git reset
 ```
 
-**Branch strategy: always commit directly to `main`.** Do NOT use a `dev` branch — this is a solo project and branching without consistently merging back causes divergence conflicts. The `/tmp` rsync is the safety buffer.
+**Critical:** The rsync only syncs `.git/refs/` and `.git/objects/` — it does NOT sync `.git/index`. Without `git reset` after each commit, the project's staging area drifts from HEAD and builds up a backlog of phantom staged changes across sessions. Always run `git reset` in the project dir as the final step.
+
+**Branch strategy:**
+- All work commits go to `dev` — **never commit directly to `main`**
+- At release: PR `dev → main`, merge, tag
+- After merge: immediately `git rebase origin/main` on `dev` so the next cycle starts clean (avoids divergence)
+- CRITICAL: The divergence conflict in v0.2.0 happened because earlier sessions broke this rule and committed directly to `main`
 
 `git checkout` in the project dir will fail — files are correct but the local branch pointer may lag.
 

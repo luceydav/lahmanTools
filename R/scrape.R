@@ -2,7 +2,8 @@
 #'
 #' Fetches individual player salary pages from `databases.usatoday.com`,
 #' saves one CSV per year to `output_dir`, then combines them and joins to
-#' Lahman `playerID` via last-name/first-name matching.
+#' Lahman-compatible `playerID` via last-name/first-name matching against the
+#' `People` table queried from a DuckDB connection.
 #'
 #' Year slugs follow two URL patterns:
 #' - 2017-2022: `mlb-salaries-{year}`
@@ -13,6 +14,9 @@
 #' @param years Integer vector of seasons to scrape. Defaults to all known
 #'   seasons (2017-2025).
 #' @param output_dir Directory for per-year CSV output and the combined file.
+#' @param con A `DBIConnection` to the baseball DuckDB database, used to look
+#'   up `People` for player ID matching. Required -- run
+#'   [setup_baseball_db()] first.
 #'
 #' @return Invisibly returns the path to the combined
 #'   `salaries_<min>_<max>_with_playerID.csv` file.
@@ -23,7 +27,8 @@
 #' scrape_salaries(years = 2025)
 #' }
 scrape_salaries <- function(years      = 2017:2025,
-                             output_dir = "mlb_salaries") {
+                             output_dir = "mlb_salaries",
+                             con        = NULL) {
   year_slugs <- c(
     "2017" = "mlb-salaries-2017",
     "2018" = "mlb-salaries-2018",
@@ -89,9 +94,14 @@ scrape_salaries <- function(years      = 2017:2025,
                                         fill = TRUE)
   all_salaries[, salary := as.numeric(gsub("[$,]", "", salary))]
 
-  # -- Join to Lahman playerID --------------------------------------------------
-  people <- data.table::as.data.table(Lahman::People)
-  match_player_ids(all_salaries, people)
+  # -- Join to playerID ---------------------------------------------------------
+  if (!is.null(con)) {
+    people <- data.table::as.data.table(DBI::dbGetQuery(con, "SELECT playerID, nameLast, nameFirst, nameGiven FROM People"))
+  } else {
+    stop("A DuckDB connection (con=) is required for player ID matching. ",
+         "Run setup_baseball_db() and pass con = connect_baseball_db().")
+  }
+  match_player_ids(all_salaries, people, con = con)
 
   match_pct <- mean(!is.na(all_salaries$playerID)) * 100
   message(sprintf("Final match rate: %.1f%% of %d rows", match_pct, nrow(all_salaries)))

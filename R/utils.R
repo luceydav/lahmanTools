@@ -168,16 +168,20 @@ normalise_player_name <- function(x) {
 #' @param sal_dt A `data.table` with a `player` column in "Last, First" format
 #'   and a `yearID` column. Optionally a `team` (display name) or `teamID`
 #'   (Lahman code) column for roster-constrained matching.
-#' @param people_dt A `data.table` from `Lahman::People` with at least
-#'   `playerID`, `nameFirst`, `nameLast`, `debut`, `finalGame`.
+#' @param people_dt A `data.table` with at least `playerID`, `nameFirst`,
+#'   `nameLast`, `debut`, `finalGame` (e.g., from the `People` table in the
+#'   baseball DuckDB database, or `Lahman::People` if the package is installed).
 #' @param roster_dt Optional `data.table` with `playerID`, `yearID`, `teamID`
 #'   columns (e.g., from Appearances). If NULL, built automatically from
-#'   Lahman::Batting + Lahman::Pitching when team info is available.
+#'   the `Batting` and `Pitching` tables via `con` when team info is available.
+#' @param con Optional `DBIConnection` used to query `Batting`/`Pitching` when
+#'   `roster_dt` is NULL. Required when team info is present in `sal_dt` --
+#'   run [setup_baseball_db()] and pass [connect_baseball_db()].
 #'
 #' @return \code{sal_dt} with a `playerID` column filled where matches succeed.
 #'   Modified by reference; also returned invisibly.
 #' @export
-match_player_ids <- function(sal_dt, people_dt, roster_dt = NULL) {
+match_player_ids <- function(sal_dt, people_dt, roster_dt = NULL, con = NULL) {
   stopifnot(
     data.table::is.data.table(sal_dt),
     data.table::is.data.table(people_dt),
@@ -285,14 +289,23 @@ match_player_ids <- function(sal_dt, people_dt, roster_dt = NULL) {
 
     # Build roster if not provided
     if (is.null(roster_dt)) {
-      roster_dt <- tryCatch({
-        bat <- data.table::as.data.table(Lahman::Batting)
-        pit <- data.table::as.data.table(Lahman::Pitching)
-        unique(rbind(
-          bat[, .(playerID, yearID, teamID)],
-          pit[, .(playerID, yearID, teamID)]
-        ))
-      }, error = function(e) NULL)
+      if (is.null(con)) {
+        warning("No DuckDB connection (con=) provided -- skipping team-constrained matching (Pass 4). ",
+                "Pass con = connect_baseball_db() for best match rates.")
+      } else {
+        roster_dt <- tryCatch({
+          bat <- data.table::as.data.table(DBI::dbGetQuery(con, "SELECT playerID, yearID, teamID FROM Batting"))
+          pit <- data.table::as.data.table(DBI::dbGetQuery(con, "SELECT playerID, yearID, teamID FROM Pitching"))
+          unique(rbind(
+            bat[, .(playerID, yearID, teamID)],
+            pit[, .(playerID, yearID, teamID)]
+          ))
+        }, error = function(e) {
+          warning("Failed to build roster from database -- skipping team-constrained matching: ",
+                  conditionMessage(e))
+          NULL
+        })
+      }
     }
 
     if (!is.null(roster_dt)) {

@@ -4,13 +4,17 @@
 \alias{scrape_salaries}
 \title{Scrape MLB salary data from USA Today}
 \usage{
-scrape_salaries(years = 2017:2025, output_dir = "mlb_salaries")
+scrape_salaries(years = 2017:2025, output_dir = "mlb_salaries", con = NULL)
 }
 \arguments{
 \item{years}{Integer vector of seasons to scrape. Defaults to all known
 seasons (2017-2025).}
 
 \item{output_dir}{Directory for per-year CSV output and the combined file.}
+
+\item{con}{A \code{DBIConnection} to the baseball DuckDB database, used to look
+up \code{People} for player ID matching. Required -- run
+\code{\link[=setup_baseball_db]{setup_baseball_db()}} first.}
 }
 \value{
 Invisibly returns the path to the combined
@@ -19,7 +23,8 @@ Invisibly returns the path to the combined
 \description{
 Fetches individual player salary pages from \code{databases.usatoday.com},
 saves one CSV per year to \code{output_dir}, then combines them and joins to
-Lahman \code{playerID} via last-name/first-name matching.
+Lahman-compatible \code{playerID} via last-name/first-name matching against the
+\code{People} table queried from a DuckDB connection.
 }
 \details{
 Year slugs follow two URL patterns:

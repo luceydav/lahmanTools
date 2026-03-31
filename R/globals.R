@@ -11,10 +11,11 @@ utils::globalVariables(c(
   # match_player_ids internal columns
   "player_exact", "player_norm", "debut_year", "final_year",
   ".row_idx", "n_matches", ".match_teamID", "last_norm", "first_init", "n",
+  "debut", "finalGame", "teamID", "team_name", "i.teamID", ".N",
   # utils.R (dt_factors_to_char)
   "factor_cols",
   # loaders.R -- Chadwick register column references
-  "key_fangraphs", "key_mlbam",
+  "key_fangraphs", "key_mlbam", "..keep_cols",
   # loaders.R -- FanGraphs leaderboard column
   "playerid"
 ))

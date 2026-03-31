@@ -30,6 +30,12 @@ derived statistics. The raw tables are never modified.
    \code{PlayerAcquisitionType} \tab \code{Batting}, \code{Pitching}, \code{People} \tab One row per player-team; classifies as \code{homegrown}, \code{young_acq}, or \code{veteran_acq} \cr
    \code{LeagueMedianSalary} \tab \code{SalariesAll} \tab League-wide median and mean salary by season; use for relative-salary normalisation \cr
    \code{TeamPayroll} \tab \code{SalariesAll} \tab Total payroll, player count, median and max salary by team-season \cr
+   \code{PlayoffPayroll} \tab \code{SeriesPost}, \code{TeamPayroll}, \code{Teams} \tab Team payroll for each playoff round reached; \code{rounds_won} counts series wins \cr
+   \code{AllStarConcentration} \tab \code{AllstarFull}, \code{TeamPayroll} \tab All-Star selections per team-season with payroll; supports talent-per-dollar analysis \cr
+   \code{AwardSalaryPremium} \tab \code{AwardsPlayers}, \code{SalariesAll}, \code{PlayerWAR} \tab Salary and WAR in the year before and year of key awards (MVP, Cy Young, Gold Glove, ROY) \cr
+   \code{HOFCareerArc} \tab \code{HallOfFame}, \code{SalaryPerWAR}, \code{PlayerWAR} \tab Inducted players with career WAR and salary arc; one row per player-year \cr
+   \code{PositionalPayroll} \tab \code{Appearances}, \code{SalariesAll}, \code{PlayerWAR} \tab Salary, WAR, and WAR/salary by primary position and era \cr
+   \code{ManagerPerformance} \tab \code{Managers}, \code{Teams}, \code{TeamPayroll} \tab Manager W-L\%, finish rank, and payroll per managed season \cr
 }
 
 

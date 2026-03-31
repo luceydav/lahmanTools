@@ -5,11 +5,10 @@ test_that("write_mcp_config() dry_run prints JSON and writes nothing", {
   expect_message(
     write_mcp_config(
       dbdir       = "/fake/baseball.duckdb",
-      binary      = "/usr/local/bin/duckdb-mcp-server",
       config_path = tmp,
       dry_run     = TRUE
     ),
-    "--readonly"
+    "mcp-server-motherduck"
   )
   expect_false(file.exists(tmp))
 })
@@ -22,7 +21,6 @@ test_that("write_mcp_config() writes valid JSON with correct structure", {
 
   write_mcp_config(
     dbdir       = "/fake/baseball.duckdb",
-    binary      = "/usr/local/bin/duckdb-mcp-server",
     config_path = tmp,
     dry_run     = FALSE
   )
@@ -30,9 +28,9 @@ test_that("write_mcp_config() writes valid JSON with correct structure", {
   expect_true(file.exists(tmp))
   cfg <- jsonlite::read_json(tmp)
   expect_true("baseball" %in% names(cfg$mcpServers))
-  expect_equal(cfg$mcpServers$baseball$command, "/usr/local/bin/duckdb-mcp-server")
-  expect_true("--readonly" %in% cfg$mcpServers$baseball$args)
-  expect_true("--db-path"  %in% cfg$mcpServers$baseball$args)
+  expect_equal(cfg$mcpServers$baseball$command, "uvx")
+  expect_true("mcp-server-motherduck" %in% cfg$mcpServers$baseball$args)
+  expect_true("--db-path"             %in% cfg$mcpServers$baseball$args)
 })
 
 test_that("write_mcp_config() always uses an absolute db path (no ~)", {
@@ -43,7 +41,6 @@ test_that("write_mcp_config() always uses an absolute db path (no ~)", {
 
   write_mcp_config(
     dbdir       = path.expand("~/baseball.duckdb"),
-    binary      = "/usr/local/bin/duckdb-mcp-server",
     config_path = tmp,
     dry_run     = FALSE
   )
@@ -70,7 +67,6 @@ test_that("write_mcp_config() merges: preserves other server entries", {
 
   write_mcp_config(
     dbdir       = "/fake/baseball.duckdb",
-    binary      = "/usr/local/bin/duckdb-mcp-server",
     config_path = tmp,
     dry_run     = FALSE
   )
@@ -80,18 +76,3 @@ test_that("write_mcp_config() merges: preserves other server entries", {
   expect_true("baseball"     %in% names(cfg$mcpServers))
 })
 
-test_that("write_mcp_config() warns and returns NULL when binary not found", {
-  tmp <- tempfile(fileext = ".json")
-
-  expect_warning(
-    result <- write_mcp_config(
-      dbdir       = "/fake/baseball.duckdb",
-      binary      = "",
-      config_path = tmp,
-      dry_run     = FALSE
-    ),
-    "duckdb-mcp-server"
-  )
-  expect_null(result)
-  expect_false(file.exists(tmp))
-})

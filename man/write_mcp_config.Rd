@@ -6,7 +6,6 @@
 \usage{
 write_mcp_config(
   dbdir = NULL,
-  binary = Sys.which("duckdb-mcp-server"),
   config_path = path.expand("~/.copilot/mcp-config.json"),
   dry_run = TRUE
 )
@@ -14,10 +13,6 @@ write_mcp_config(
 \arguments{
 \item{dbdir}{Path to \code{baseball.duckdb}. Defaults to the \code{LAHMANS_DBDIR}
 environment variable, then \verb{~/Documents/Data/baseball/baseball.duckdb}.}
-
-\item{binary}{Full path to the \code{duckdb-mcp-server} binary. Defaults to
-\code{Sys.which("duckdb-mcp-server")}. Install with
-\verb{uv tool install duckdb-mcp-server}.}
 
 \item{config_path}{Path to write the MCP config JSON. Defaults to
 \verb{~/.copilot/mcp-config.json} (read by GitHub Copilot CLI).}
@@ -27,12 +22,12 @@ without touching any files. Set \code{FALSE} to write.}
 }
 \value{
 Invisibly returns \code{config_path} when written, or \code{NULL} in dry-run
-mode or when the binary is not found. Called for its side effects.
+mode. Called for its side effects.
 }
 \description{
 Writes (or previews) the JSON entry needed to expose \code{baseball.duckdb} as a
-local \href{https://github.com/alexmacy/duckdb-mcp-server}{DuckDB MCP server} for
-AI tools such as GitHub Copilot CLI and Claude Code.
+local \href{https://github.com/motherduckdb/mcp-server-motherduck}{DuckDB MCP server}
+for AI tools such as GitHub Copilot CLI and Claude Code.
 }
 \details{
 The main pain point this solves: Python-based MCP servers do \strong{not} expand
@@ -40,8 +35,8 @@ The main pain point this solves: Python-based MCP servers do \strong{not} expand
 resolves \code{dbdir} to a full path before writing.
 
 When \code{config_path} already exists, only the \code{"baseball"} key is updated;
-all other server entries are preserved. \code{--readonly} is always included in
-the server args -- omitting it would allow an AI agent to modify or drop
+all other server entries are preserved. The server runs read-only by default
+-- omitting \code{--read-write} prevents an AI agent from modifying or dropping
 tables.
 }
 \examples{

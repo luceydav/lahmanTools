@@ -1,30 +1,27 @@
 #' Generate or write an MCP server config for baseball.duckdb
 #'
 #' Writes (or previews) the JSON entry needed to expose `baseball.duckdb` as a
-#' local [DuckDB MCP server](https://github.com/alexmacy/duckdb-mcp-server) for
-#' AI tools such as GitHub Copilot CLI and Claude Code.
+#' local [DuckDB MCP server](https://github.com/motherduckdb/mcp-server-motherduck)
+#' for AI tools such as GitHub Copilot CLI and Claude Code.
 #'
 #' The main pain point this solves: Python-based MCP servers do **not** expand
 #' `~` in path arguments, so the database path must be absolute. This function
 #' resolves `dbdir` to a full path before writing.
 #'
 #' When `config_path` already exists, only the `"baseball"` key is updated;
-#' all other server entries are preserved. `--readonly` is always included in
-#' the server args -- omitting it would allow an AI agent to modify or drop
+#' all other server entries are preserved. The server runs read-only by default
+#' -- omitting `--read-write` prevents an AI agent from modifying or dropping
 #' tables.
 #'
 #' @param dbdir Path to `baseball.duckdb`. Defaults to the `LAHMANS_DBDIR`
 #'   environment variable, then `~/Documents/Data/baseball/baseball.duckdb`.
-#' @param binary Full path to the `duckdb-mcp-server` binary. Defaults to
-#'   `Sys.which("duckdb-mcp-server")`. Install with
-#'   `uv tool install duckdb-mcp-server`.
 #' @param config_path Path to write the MCP config JSON. Defaults to
 #'   `~/.copilot/mcp-config.json` (read by GitHub Copilot CLI).
 #' @param dry_run If `TRUE` (default), prints the JSON that would be written
 #'   without touching any files. Set `FALSE` to write.
 #'
 #' @return Invisibly returns `config_path` when written, or `NULL` in dry-run
-#'   mode or when the binary is not found. Called for its side effects.
+#'   mode. Called for its side effects.
 #' @export
 #'
 #' @seealso [setup_baseball_db()], [connect_baseball_db()]
@@ -41,7 +38,6 @@
 #' write_mcp_config(dbdir = "/data/baseball/baseball.duckdb", dry_run = FALSE)
 #' }
 write_mcp_config <- function(dbdir       = NULL,
-                              binary      = Sys.which("duckdb-mcp-server"),
                               config_path = path.expand("~/.copilot/mcp-config.json"),
                               dry_run     = TRUE) {
 
@@ -54,22 +50,12 @@ write_mcp_config <- function(dbdir       = NULL,
   }
   dbdir <- path.expand(dbdir)   # ~ is not expanded by Python subprocesses
 
-  # -- validate binary ---------------------------------------------------------
-  binary <- unname(binary)      # Sys.which() returns a named character vector
-  if (!nzchar(binary)) {
-    warning(
-      "duckdb-mcp-server not found on PATH. ",
-      "Install it with:\n  uv tool install duckdb-mcp-server\n",
-      "Then re-run write_mcp_config(dry_run = FALSE).",
-      call. = FALSE
-    )
-    return(invisible(NULL))
-  }
-
   # -- build the server entry --------------------------------------------------
+  # Uses uvx so no global install is needed; mcp-server-motherduck is fetched
+  # automatically. Read-only by default (omit --read-write).
   new_entry <- list(
-    command = binary,
-    args    = list("--db-path", dbdir, "--readonly")
+    command = "uvx",
+    args    = list("mcp-server-motherduck", "--db-path", dbdir)
   )
 
   # -- dry run: print and exit -------------------------------------------------
@@ -83,8 +69,8 @@ write_mcp_config <- function(dbdir       = NULL,
       # Fallback when jsonlite not installed -- hand-format the snippet
       snippet <- paste0(
         '{\n  "mcpServers": {\n    "baseball": {\n',
-        '      "command": "', binary, '",\n',
-        '      "args": ["--db-path", "', dbdir, '", "--readonly"]\n',
+        '      "command": "uvx",\n',
+        '      "args": ["mcp-server-motherduck", "--db-path", "', dbdir, '"]\n',
         '    }\n  }\n}'
       )
     }

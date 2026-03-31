@@ -1,3 +1,5 @@
+^renv$
+^renv\.lock$
 ^.*\.Rproj$
 ^\.Rproj\.user$
 ^baseball\.duckdb$
@@ -8,3 +10,7 @@
 ^project_notes$
 ^mlb_salaries$
 ^Salaries\.csv$
+^\.copilot$
+^AGENTS\.md$
+^CONTRIBUTING\.md$
+^analysis$
