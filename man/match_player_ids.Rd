@@ -19,8 +19,9 @@ baseball DuckDB database, or \code{Lahman::People} if the package is installed).
 columns (e.g., from Appearances). If NULL, built automatically from
 the \code{Batting} and \code{Pitching} tables via \code{con} when team info is available.}
 
-\item{con}{Optional DuckDB connection used to query \code{Batting}/\code{Pitching} when
-\code{roster_dt} is NULL. Falls back to the \pkg{Lahman} package if installed.}
+\item{con}{Optional \code{DBIConnection} used to query \code{Batting}/\code{Pitching} when
+\code{roster_dt} is NULL. Required when team info is present in \code{sal_dt} --
+run \code{\link[=setup_baseball_db]{setup_baseball_db()}} and pass \code{\link[=connect_baseball_db]{connect_baseball_db()}}.}
 }
 \value{
 \code{sal_dt} with a \code{playerID} column filled where matches succeed.

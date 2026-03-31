@@ -18,8 +18,12 @@
 
 ## Dependency changes
 
-* Core `Imports` reduced to `DBI`, `duckdb`, `data.table`, `httr2`, `rvest`,
-  `xml2`. `Lahman` moved to `Suggests`.
+* `Lahman` removed from `Suggests` entirely. The package is no longer used
+  anywhere. `scrape_salaries()` and `match_player_ids()` now require a DuckDB
+  `con=` argument and error clearly if it is missing -- the Lahman package
+  fallback paths have been deleted.
+
+
 
 ## New views in `create_stats_views()`
 

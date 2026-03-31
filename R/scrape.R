@@ -3,7 +3,7 @@
 #' Fetches individual player salary pages from `databases.usatoday.com`,
 #' saves one CSV per year to `output_dir`, then combines them and joins to
 #' Lahman-compatible `playerID` via last-name/first-name matching against the
-#' `People` table (queried from a DuckDB connection or the \pkg{Lahman} package).
+#' `People` table queried from a DuckDB connection.
 #'
 #' Year slugs follow two URL patterns:
 #' - 2017-2022: `mlb-salaries-{year}`
@@ -14,6 +14,9 @@
 #' @param years Integer vector of seasons to scrape. Defaults to all known
 #'   seasons (2017-2025).
 #' @param output_dir Directory for per-year CSV output and the combined file.
+#' @param con A `DBIConnection` to the baseball DuckDB database, used to look
+#'   up `People` for player ID matching. Required -- run
+#'   [setup_baseball_db()] first.
 #'
 #' @return Invisibly returns the path to the combined
 #'   `salaries_<min>_<max>_with_playerID.csv` file.
@@ -94,10 +97,9 @@ scrape_salaries <- function(years      = 2017:2025,
   # -- Join to playerID ---------------------------------------------------------
   if (!is.null(con)) {
     people <- data.table::as.data.table(DBI::dbGetQuery(con, "SELECT playerID, nameLast, nameFirst, nameGiven FROM People"))
-  } else if (requireNamespace("Lahman", quietly = TRUE)) {
-    people <- data.table::as.data.table(Lahman::People)
   } else {
-    stop("Either a DuckDB connection (con=) or the Lahman package is required for player ID matching.")
+    stop("A DuckDB connection (con=) is required for player ID matching. ",
+         "Run setup_baseball_db() and pass con = connect_baseball_db().")
   }
   match_player_ids(all_salaries, people, con = con)
 

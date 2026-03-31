@@ -22,7 +22,6 @@ Imports:
     rvest,
     xml2
 Suggests:
-    Lahman,
     baseballr,
     connections,
     dm,

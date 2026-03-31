@@ -174,8 +174,9 @@ normalise_player_name <- function(x) {
 #' @param roster_dt Optional `data.table` with `playerID`, `yearID`, `teamID`
 #'   columns (e.g., from Appearances). If NULL, built automatically from
 #'   the `Batting` and `Pitching` tables via `con` when team info is available.
-#' @param con Optional DuckDB connection used to query `Batting`/`Pitching` when
-#'   `roster_dt` is NULL. Falls back to the \pkg{Lahman} package if installed.
+#' @param con Optional `DBIConnection` used to query `Batting`/`Pitching` when
+#'   `roster_dt` is NULL. Required when team info is present in `sal_dt` --
+#'   run [setup_baseball_db()] and pass [connect_baseball_db()].
 #'
 #' @return \code{sal_dt} with a `playerID` column filled where matches succeed.
 #'   Modified by reference; also returned invisibly.
@@ -292,11 +293,9 @@ match_player_ids <- function(sal_dt, people_dt, roster_dt = NULL, con = NULL) {
         if (!is.null(con)) {
           bat <- data.table::as.data.table(DBI::dbGetQuery(con, "SELECT playerID, yearID, teamID FROM Batting"))
           pit <- data.table::as.data.table(DBI::dbGetQuery(con, "SELECT playerID, yearID, teamID FROM Pitching WHERE playerID NOT IN (SELECT DISTINCT playerID FROM Batting)"))
-        } else if (requireNamespace("Lahman", quietly = TRUE)) {
-          bat <- data.table::as.data.table(Lahman::Batting)
-          pit <- data.table::as.data.table(Lahman::Pitching)
         } else {
-          stop("Either a DuckDB connection or the Lahman package is required to build a roster.")
+          stop("A DuckDB connection (con=) is required to build a roster. ",
+               "Run setup_baseball_db() and pass con = connect_baseball_db().")
         }
         unique(rbind(
           bat[, .(playerID, yearID, teamID)],
