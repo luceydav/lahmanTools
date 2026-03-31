@@ -4,19 +4,23 @@
 \alias{match_player_ids}
 \title{Match salary data to Lahman playerIDs via multi-pass name matching}
 \usage{
-match_player_ids(sal_dt, people_dt, roster_dt = NULL)
+match_player_ids(sal_dt, people_dt, roster_dt = NULL, con = NULL)
 }
 \arguments{
 \item{sal_dt}{A \code{data.table} with a \code{player} column in "Last, First" format
 and a \code{yearID} column. Optionally a \code{team} (display name) or \code{teamID}
 (Lahman code) column for roster-constrained matching.}
 
-\item{people_dt}{A \code{data.table} from \code{Lahman::People} with at least
-\code{playerID}, \code{nameFirst}, \code{nameLast}, \code{debut}, \code{finalGame}.}
+\item{people_dt}{A \code{data.table} with at least \code{playerID}, \code{nameFirst},
+\code{nameLast}, \code{debut}, \code{finalGame} (e.g., from the \code{People} table in the
+baseball DuckDB database, or \code{Lahman::People} if the package is installed).}
 
 \item{roster_dt}{Optional \code{data.table} with \code{playerID}, \code{yearID}, \code{teamID}
 columns (e.g., from Appearances). If NULL, built automatically from
-Lahman::Batting + Lahman::Pitching when team info is available.}
+the \code{Batting} and \code{Pitching} tables via \code{con} when team info is available.}
+
+\item{con}{Optional DuckDB connection used to query \code{Batting}/\code{Pitching} when
+\code{roster_dt} is NULL. Falls back to the \pkg{Lahman} package if installed.}
 }
 \value{
 \code{sal_dt} with a \code{playerID} column filled where matches succeed.

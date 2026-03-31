@@ -1,7 +1,7 @@
 test_that("setup_baseball_db() builds expected tables and views", {
-  # Requires the Lahman package and ~30s to complete — skip in CI
+  # Requires internet access and ~30s to complete -- skip in CI
   skip_on_ci()
-  skip_if_not_installed("Lahman")
+  skip_if_offline()
 
   db_path <- tempfile(fileext = ".duckdb")
   on.exit(unlink(db_path), add = TRUE)
@@ -34,7 +34,7 @@ test_that("setup_baseball_db() builds expected tables and views", {
 
 test_that("setup_baseball_db() errors if file exists and overwrite = FALSE", {
   skip_on_ci()
-  skip_if_not_installed("Lahman")
+  skip_if_offline()
 
   db_path <- tempfile(fileext = ".duckdb")
   on.exit(unlink(db_path), add = TRUE)
@@ -67,7 +67,7 @@ make_usatoday_csv <- function(rows) {
 
 test_that("SalariesAll normalises Spotrac team codes to Lahman teamIDs", {
   skip_on_ci()
-  skip_if_not_installed("Lahman")
+  skip_if_offline()
 
   # Spotrac uses non-Lahman abbreviations for several teams
   spotrac_rows <- list(
@@ -116,7 +116,7 @@ test_that("SalariesAll normalises Spotrac team codes to Lahman teamIDs", {
 
 test_that("SalariesAll Spotrac branch excludes sub-minimum salary players", {
   skip_on_ci()
-  skip_if_not_installed("Lahman")
+  skip_if_offline()
 
   sp_file <- make_spotrac_csv(list(
     yearID   = c(2019L, 2019L, 2019L),
@@ -151,7 +151,7 @@ test_that("SalariesAll Spotrac branch excludes sub-minimum salary players", {
 
 test_that("SalariesAll normalises USA Today team names to Lahman teamIDs", {
   skip_on_ci()
-  skip_if_not_installed("Lahman")
+  skip_if_offline()
 
   # Representative sample of USA Today name variants
   usa_rows <- list(
@@ -243,7 +243,7 @@ test_that("SalariesAll expands century-crossing 2-digit end years correctly", {
 
 test_that("SalariesAll teamIDs join cleanly to Teams for 2017-2023", {
   skip_on_ci()
-  skip_if_not_installed("Lahman")
+  skip_if_offline()
 
   # Build a Spotrac CSV covering the four teams whose codes differ most
   sp_file <- make_spotrac_csv(list(

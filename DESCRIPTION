@@ -18,11 +18,11 @@ Imports:
     DBI,
     duckdb,
     data.table,
-    Lahman,
     httr2,
     rvest,
     xml2
 Suggests:
+    Lahman,
     baseballr,
     connections,
     dm,

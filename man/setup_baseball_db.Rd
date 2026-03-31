@@ -49,16 +49,22 @@ Defaults to \code{1985:2025} (full salary era).}
 Invisibly returns \code{dbdir}.
 }
 \description{
-Writes all Lahman package tables plus scraped salary data into a persistent
-DuckDB file, then creates a \code{SalariesAll} view that unions all salary
-sources on a common schema:
+Downloads all 27 Lahman baseball tables directly from the
+\href{https://github.com/cbwinslow/baseballdatabank}{Chadwick Bureau baseballdatabank}
+via DuckDB's httpfs extension and writes them into a persistent DuckDB file,
+then creates a \code{SalariesAll} view that unions all salary sources on a common
+schema:
 \itemize{
-\item \strong{Lahman} (\code{Salaries}): authoritative 1985–2016
-\item \strong{Spotrac} (\code{SalariesSpotrac}): player-level actuals 2017–2021
-\item \strong{USA Today} (\code{SalariesUSAToday}): player-level actuals 2022–2025
+\item \strong{Chadwick Bureau} (\code{Salaries}): authoritative 1985--2016
+\item \strong{Spotrac} (\code{SalariesSpotrac}): player-level actuals 2017--2021
+\item \strong{USA Today} (\code{SalariesUSAToday}): player-level actuals 2022--2025
 }
 }
 \details{
+Requires an internet connection to download the base tables. Optional tables
+that fail to download are skipped with a warning; required tables (People,
+Batting, Pitching, Fielding, Teams, Salaries) raise an error.
+
 Optionally fetches supplemental data via \pkg{baseballr}:
 \itemize{
 \item \code{load_chadwick = TRUE} downloads the Chadwick Bureau player ID crosswalk
@@ -71,7 +77,7 @@ from FanGraphs for the full salary era (1985+).
 }
 \examples{
 \dontrun{
-# Lahman only
+# Download all tables from Chadwick Bureau and build database
 setup_baseball_db()
 
 # With full WAR coverage (requires baseballr and internet)

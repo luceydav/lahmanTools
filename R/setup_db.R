@@ -1,11 +1,17 @@
 #' Build the baseball DuckDB database
 #'
-#' Writes all Lahman package tables plus scraped salary data into a persistent
-#' DuckDB file, then creates a `SalariesAll` view that unions all salary
-#' sources on a common schema:
-#' - **Lahman** (`Salaries`): authoritative 1985–2016
-#' - **Spotrac** (`SalariesSpotrac`): player-level actuals 2017–2021
-#' - **USA Today** (`SalariesUSAToday`): player-level actuals 2022–2025
+#' Downloads all 27 Lahman baseball tables directly from the
+#' [Chadwick Bureau baseballdatabank](https://github.com/cbwinslow/baseballdatabank)
+#' via DuckDB's httpfs extension and writes them into a persistent DuckDB file,
+#' then creates a `SalariesAll` view that unions all salary sources on a common
+#' schema:
+#' - **Chadwick Bureau** (`Salaries`): authoritative 1985--2016
+#' - **Spotrac** (`SalariesSpotrac`): player-level actuals 2017--2021
+#' - **USA Today** (`SalariesUSAToday`): player-level actuals 2022--2025
+#'
+#' Requires an internet connection to download the base tables. Optional tables
+#' that fail to download are skipped with a warning; required tables (People,
+#' Batting, Pitching, Fielding, Teams, Salaries) raise an error.
 #'
 #' Optionally fetches supplemental data via \pkg{baseballr}:
 #' - `load_chadwick = TRUE` downloads the Chadwick Bureau player ID crosswalk
@@ -44,7 +50,7 @@
 #'
 #' @examples
 #' \dontrun{
-#' # Lahman only
+#' # Download all tables from Chadwick Bureau and build database
 #' setup_baseball_db()
 #'
 #' # With full WAR coverage (requires baseballr and internet)
@@ -70,17 +76,70 @@ setup_baseball_db <- function(dbdir         = NULL,
   con <- DBI::dbConnect(duckdb::duckdb(), dbdir = dbdir)
   on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
 
-  # -- Lahman tables -----------------------------------------------------------
-  skip    <- c("LahmanData", "battingLabels", "fieldingLabels", "pitchingLabels")
-  tbl_names <- setdiff(data(package = "Lahman")$results[, "Item"], skip)
+  # -- Install httpfs and load baseballdatabank CSVs ---------------------------
+  DBI::dbExecute(con, "INSTALL httpfs; LOAD httpfs")
 
-  invisible(lapply(tbl_names, function(nm) {
-    e <- new.env(parent = emptyenv())
-    utils::data(list = nm, package = "Lahman", envir = e)
-    dt <- data.table::as.data.table(e[[nm]])
-    dt_factors_to_char(dt)
-    DBI::dbWriteTable(con, nm, dt, overwrite = TRUE)
-    message(sprintf("  %-25s %d rows", nm, nrow(dt)))
+  base_url <- "https://raw.githubusercontent.com/cbwinslow/baseballdatabank/master"
+
+  # Table catalog: name -> list(subdir, required)
+  tbl_catalog <- list(
+    # Core tables (19)
+    AllstarFull        = list(subdir = "core",    required = FALSE),
+    Appearances        = list(subdir = "core",    required = FALSE),
+    Batting            = list(subdir = "core",    required = TRUE),
+    BattingPost        = list(subdir = "core",    required = FALSE),
+    Fielding           = list(subdir = "core",    required = TRUE),
+    FieldingOF         = list(subdir = "core",    required = FALSE),
+    FieldingOFsplit    = list(subdir = "core",    required = FALSE),
+    FieldingPost       = list(subdir = "core",    required = FALSE),
+    HomeGames          = list(subdir = "core",    required = FALSE),
+    Managers           = list(subdir = "core",    required = FALSE),
+    ManagersHalf       = list(subdir = "core",    required = FALSE),
+    Parks              = list(subdir = "core",    required = FALSE),
+    People             = list(subdir = "core",    required = TRUE),
+    Pitching           = list(subdir = "core",    required = TRUE),
+    PitchingPost       = list(subdir = "core",    required = FALSE),
+    SeriesPost         = list(subdir = "core",    required = FALSE),
+    Teams              = list(subdir = "core",    required = TRUE),
+    TeamsFranchises    = list(subdir = "core",    required = FALSE),
+    TeamsHalf          = list(subdir = "core",    required = FALSE),
+    # Contrib tables (8)
+    AwardsManagers     = list(subdir = "contrib", required = FALSE),
+    AwardsPlayers      = list(subdir = "contrib", required = FALSE),
+    AwardsShareManagers = list(subdir = "contrib", required = FALSE),
+    AwardsSharePlayers = list(subdir = "contrib", required = FALSE),
+    CollegePlaying     = list(subdir = "contrib", required = FALSE),
+    HallOfFame         = list(subdir = "contrib", required = FALSE),
+    Salaries           = list(subdir = "contrib", required = TRUE),
+    Schools            = list(subdir = "contrib", required = FALSE)
+  )
+
+  # Tables that need 2B/3B column renames
+  rename_2b3b <- c("Batting", "BattingPost")
+
+  invisible(lapply(names(tbl_catalog), function(nm) {
+    info <- tbl_catalog[[nm]]
+    url  <- sprintf("%s/%s/%s.csv", base_url, info$subdir, nm)
+
+    select_expr <- if (nm %in% rename_2b3b) {
+      sprintf('SELECT * EXCLUDE ("2B", "3B"), "2B" AS X2B, "3B" AS X3B FROM read_csv_auto(\'%s\', sample_size=-1)', url)
+    } else {
+      sprintf("SELECT * FROM read_csv_auto('%s', sample_size=-1)", url)
+    }
+
+    tryCatch({
+      DBI::dbExecute(con, sprintf('CREATE OR REPLACE TABLE "%s" AS %s', nm, select_expr))
+      n <- DBI::dbGetQuery(con, sprintf('SELECT COUNT(*) AS n FROM "%s"', nm))$n
+      message(sprintf("  %-25s %d rows", nm, n))
+    }, error = function(e) {
+      if (info$required) {
+        stop(sprintf("Required table '%s' failed to load from %s.\n  Check internet connection.\n  Error: %s",
+                     nm, url, conditionMessage(e)), call. = FALSE)
+      } else {
+        warning(sprintf("Optional table '%s' failed to load from %s -- skipping.\n  Error: %s",
+                        nm, url, conditionMessage(e)), call. = FALSE)
+      }
+    })
   }))
 
   # -- Spotrac scraped salaries (2017-2021) -------------------------------------
@@ -313,7 +372,5 @@ setup_baseball_db <- function(dbdir         = NULL,
 
   n <- length(DBI::dbListTables(con))
   message(sprintf("\nDone. %d tables/views written to %s", n, dbdir))
-  message("Tip: run write_mcp_config() to configure AI tools (Copilot CLI, Claude Code) ",
-          "to query this database.")
   invisible(dbdir)
 }

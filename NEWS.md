@@ -1,3 +1,52 @@
+# lahmanTools (development)
+
+## Breaking changes
+
+* `setup_baseball_db()` no longer requires the `Lahman` R package. All 27
+  baseball tables are now downloaded directly from the
+  [Chadwick Bureau baseballdatabank](https://github.com/cbwinslow/baseballdatabank)
+  via DuckDB's httpfs extension. An internet connection is required during
+  initial setup. `Lahman` has been moved from `Imports` to `Suggests` and
+  serves only as a fallback in `match_player_ids()` and `scrape_salaries()`.
+
+* `match_player_ids()` gains a `con` parameter (default `NULL`). When provided,
+  the team roster is queried from the DuckDB database instead of `Lahman::Batting`
+  and `Lahman::Pitching`.
+
+* `scrape_salaries()` gains a `con` parameter (default `NULL`). When provided,
+  `People` data is queried from the DuckDB database instead of `Lahman::People`.
+
+## Dependency changes
+
+* Core `Imports` reduced to `DBI`, `duckdb`, `data.table`, `httr2`, `rvest`,
+  `xml2`. `Lahman` moved to `Suggests`.
+
+# lahmanTools (development)
+
+## Breaking changes
+
+* `setup_baseball_db()` no longer depends on the **Lahman** R package.
+  All 27 tables are now loaded directly from the
+  [cbwinslow/baseballdatabank](https://github.com/cbwinslow/baseballdatabank)
+  CSV repository via DuckDB's `httpfs` extension. An internet connection is
+  required the first time `setup_baseball_db()` is called.
+  The **Lahman** package has been moved from `Imports` to `Suggests`; it
+  remains as a fallback for `match_player_ids()` and `scrape_salaries()`
+  when no DuckDB connection is supplied.
+
+* `match_player_ids()` gains a `con` parameter (DuckDB connection, default
+  `NULL`). When supplied, roster data is read from the database instead of
+  the Lahman package.
+
+* `scrape_salaries()` gains a `con` parameter (DuckDB connection, default
+  `NULL`). When supplied, `People` data is read from the database.
+
+## Internal changes
+
+* Core `Imports` reduced to `DBI`, `duckdb`, `data.table`, `httr2`, `rvest`,
+  `xml2`. Removed `dplyr`, `tibble`, `magrittr` and other indirect tidyverse
+  dependencies.
+
 # lahmanTools 0.2.0
 
 ## New features

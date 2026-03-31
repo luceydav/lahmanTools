@@ -4,7 +4,7 @@
 \alias{scrape_salaries}
 \title{Scrape MLB salary data from USA Today}
 \usage{
-scrape_salaries(years = 2017:2025, output_dir = "mlb_salaries")
+scrape_salaries(years = 2017:2025, output_dir = "mlb_salaries", con = NULL)
 }
 \arguments{
 \item{years}{Integer vector of seasons to scrape. Defaults to all known
