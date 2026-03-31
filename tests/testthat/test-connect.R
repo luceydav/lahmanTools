@@ -92,7 +92,7 @@ stub_all_tables <- function(con) {
   DBI::dbExecute(con, "
     CREATE TABLE PlayerWAR (
       playerID VARCHAR, yearID INTEGER,
-      bWAR DOUBLE, pWAR DOUBLE
+      bat_war DOUBLE, pit_war DOUBLE
     )")
 }
 

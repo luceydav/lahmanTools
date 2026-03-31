@@ -231,35 +231,40 @@ setup_baseball_db <- function(dbdir         = NULL,
           salary::DOUBLE                                                    AS salary,
           yearID,
           average_annual::DOUBLE                                            AS aav,
-          TRY_CAST(regexp_extract(years, '\\((\\d{4})-', 1) AS INTEGER)    AS c_start,
-          CASE
-            WHEN regexp_extract(years, '-(\\d{4})\\)', 1) <> ''
-              THEN TRY_CAST(regexp_extract(years, '-(\\d{4})\\)', 1) AS INTEGER)
-            WHEN regexp_extract(years, '-(\\d{2})\\)', 1) <> ''
-              -- Century-safe: base century from c_start + 100 if 2-digit end wraps
-              THEN (
-                     (TRY_CAST(regexp_extract(years, '\\((\\d{4})-', 1) AS INTEGER) / 100) * 100
-                     + TRY_CAST(regexp_extract(years, '-(\\d{2})\\)', 1) AS INTEGER)
-                     + CASE
-                         WHEN TRY_CAST(regexp_extract(years, '-(\\d{2})\\)', 1) AS INTEGER)
-                                < TRY_CAST(regexp_extract(years, '\\((\\d{4})-', 1) AS INTEGER) % 100
-                         THEN 100 ELSE 0
-                       END
-                   )::INTEGER
-          END                                                               AS c_end
+          -- Extract year parts once so the CASE below can reference them cleanly
+          TRY_CAST(regexp_extract(years, '\\((\\d{4})-', 1) AS INTEGER)    AS y_start,
+          regexp_extract(years, '-(\\d{4})\\)', 1)                         AS y_end_4,
+          TRY_CAST(regexp_extract(years, '-(\\d{2})\\)', 1) AS INTEGER)    AS y_end_2
         FROM SalariesUSAToday
         WHERE playerID IS NOT NULL
+      ),
+      usa_parsed2 AS (
+        SELECT
+          playerID, teamID, salary, yearID, aav,
+          y_start                                                           AS c_start,
+          CASE
+            WHEN y_end_4 <> ''
+              THEN TRY_CAST(y_end_4 AS INTEGER)
+            WHEN y_end_2 IS NOT NULL
+              -- Century-safe: base century from c_start + 100 if 2-digit end wraps
+              THEN (
+                     (y_start / 100) * 100
+                     + y_end_2
+                     + CASE WHEN y_end_2 < y_start % 100 THEN 100 ELSE 0 END
+                   )::INTEGER
+          END                                                               AS c_end
+        FROM usa_parsed
       ),
       actual AS (
         SELECT DISTINCT ON (playerID, yearID)
           playerID, teamID, salary, yearID
-        FROM usa_parsed
+        FROM usa_parsed2
         ORDER BY playerID, yearID
       ),
       contracts AS (
         SELECT DISTINCT ON (playerID, c_start, c_end)
           playerID, teamID, aav, c_start, c_end
-        FROM usa_parsed
+        FROM usa_parsed2
         WHERE c_start IS NOT NULL
           AND c_end   IS NOT NULL
           AND c_start <= c_end

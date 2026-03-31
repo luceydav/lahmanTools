@@ -396,7 +396,7 @@ create_stats_views <- function(con) {
       ),
       war AS (
         SELECT playerID, yearID,
-               bWAR + pWAR AS total_war
+               bat_war + pit_war AS total_war
         FROM PlayerWAR
       )
       SELECT
@@ -436,7 +436,7 @@ create_stats_views <- function(con) {
       ),
       war AS (
         SELECT playerID, yearID,
-               bWAR + pWAR AS total_war
+               bat_war + pit_war AS total_war
         FROM PlayerWAR
       )
       SELECT
@@ -488,7 +488,7 @@ create_stats_views <- function(con) {
         WHERE rn = 1
       ),
       war AS (
-        SELECT playerID, yearID, bWAR + pWAR AS total_war
+        SELECT playerID, yearID, bat_war + pit_war AS total_war
         FROM PlayerWAR
       )
       SELECT

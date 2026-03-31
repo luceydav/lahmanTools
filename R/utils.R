@@ -289,19 +289,23 @@ match_player_ids <- function(sal_dt, people_dt, roster_dt = NULL, con = NULL) {
 
     # Build roster if not provided
     if (is.null(roster_dt)) {
-      roster_dt <- tryCatch({
-        if (!is.null(con)) {
+      if (is.null(con)) {
+        warning("No DuckDB connection (con=) provided -- skipping team-constrained matching (Pass 4). ",
+                "Pass con = connect_baseball_db() for best match rates.")
+      } else {
+        roster_dt <- tryCatch({
           bat <- data.table::as.data.table(DBI::dbGetQuery(con, "SELECT playerID, yearID, teamID FROM Batting"))
-          pit <- data.table::as.data.table(DBI::dbGetQuery(con, "SELECT playerID, yearID, teamID FROM Pitching WHERE playerID NOT IN (SELECT DISTINCT playerID FROM Batting)"))
-        } else {
-          stop("A DuckDB connection (con=) is required to build a roster. ",
-               "Run setup_baseball_db() and pass con = connect_baseball_db().")
-        }
-        unique(rbind(
-          bat[, .(playerID, yearID, teamID)],
-          pit[, .(playerID, yearID, teamID)]
-        ))
-      }, error = function(e) NULL)
+          pit <- data.table::as.data.table(DBI::dbGetQuery(con, "SELECT playerID, yearID, teamID FROM Pitching"))
+          unique(rbind(
+            bat[, .(playerID, yearID, teamID)],
+            pit[, .(playerID, yearID, teamID)]
+          ))
+        }, error = function(e) {
+          warning("Failed to build roster from database -- skipping team-constrained matching: ",
+                  conditionMessage(e))
+          NULL
+        })
+      }
     }
 
     if (!is.null(roster_dt)) {
