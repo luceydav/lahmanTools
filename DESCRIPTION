@@ -8,9 +8,7 @@ Description: Loads all Sean Lahman baseball tables (1871-2025) into a persistent
     PitchingStats, SalaryPerWAR, etc.). Optionally extends salary coverage to
     2017-2025 from USA Today and Spotrac, and supplements with FanGraphs WAR
     (1985+) and Chadwick Bureau player ID crosswalk via the baseballr package.
-    Includes write_mcp_config() to connect the database to GitHub Copilot CLI
-    or Claude via a local DuckDB MCP server. No third-party data is bundled;
-    all supplemental data is fetched at runtime.
+    No third-party data is bundled; all supplemental data is fetched at runtime.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Depends: R (>= 4.1.0)
