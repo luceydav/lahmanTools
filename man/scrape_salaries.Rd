@@ -19,7 +19,8 @@ Invisibly returns the path to the combined
 \description{
 Fetches individual player salary pages from \code{databases.usatoday.com},
 saves one CSV per year to \code{output_dir}, then combines them and joins to
-Lahman \code{playerID} via last-name/first-name matching.
+Lahman-compatible \code{playerID} via last-name/first-name matching against the
+\code{People} table (queried from a DuckDB connection or the \pkg{Lahman} package).
 }
 \details{
 Year slugs follow two URL patterns:
