@@ -1,6 +1,6 @@
 Package: lahmanTools
 Title: Baseball Analytics with Lahman and DuckDB
-Version: 0.2.0
+Version: 0.3.0
 Authors@R: person("David", "Lucey", role = c("aut", "cre"),
                   email = "david@example.com")
 Description: Loads all Sean Lahman baseball tables (1871-2025) into a persistent

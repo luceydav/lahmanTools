@@ -213,17 +213,11 @@ db_query(con, "
 
 ## AI-assisted querying (MCP)
 
-If you use [GitHub Copilot CLI](https://docs.github.com/en/copilot/using-github-copilot/using-github-copilot-in-the-command-line) or [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview), you can connect either tool to `baseball.duckdb` via a local [DuckDB MCP server](https://github.com/alexmacy/duckdb-mcp-server). The AI agent writes and executes SQL against your live database in response to plain-English questions — no R session required.
+If you use [GitHub Copilot CLI](https://docs.github.com/en/copilot/using-github-copilot/using-github-copilot-in-the-command-line) or [Claude Code](https://code.claude.com/docs/en/overview), you can connect either tool to `baseball.duckdb` via the [MotherDuck MCP server](https://github.com/motherduckdb/mcp-server-motherduck). The AI agent writes and executes SQL against your live database in response to plain-English questions — no R session required.
 
 ### Setup
 
-```bash
-uv tool install duckdb-mcp-server   # or: pip install duckdb-mcp-server
-```
-
-Then let the package generate the config for you -- it resolves paths to
-absolute form (required by Python-based MCP servers) and handles merging
-with any existing config:
+No installation needed -- the server runs via `uvx` (part of [uv](https://github.com/astral-sh/uv)):
 
 ```r
 # Preview the JSON that would be written
@@ -233,21 +227,20 @@ write_mcp_config()
 write_mcp_config(dry_run = FALSE)
 ```
 
-Or write it manually -- replace the paths with your actual binary location
-(`which duckdb-mcp-server`) and database path:
+Or write it manually -- replace the database path with your actual path:
 
 ```json
 {
   "mcpServers": {
     "baseball": {
-      "command": "/Users/you/.local/bin/duckdb-mcp-server",
-      "args": ["--db-path", "/path/to/baseball.duckdb", "--readonly"]
+      "command": "uvx",
+      "args": ["mcp-server-motherduck", "--db-path", "/path/to/baseball.duckdb"]
     }
   }
 }
 ```
 
-`--readonly` is required -- omitting it allows an AI agent to mutate or drop tables.
+The server runs read-only by default -- omit `--read-write` to prevent an AI agent from mutating or dropping tables.
 
 ### What an interaction looks like
 
@@ -307,7 +300,7 @@ the source license.
 | Source | License | Obligation |
 |--------|---------|------------|
 | [Sean Lahman Baseball Database](http://www.seanlahman.com/) via [cbwinslow/baseballdatabank](https://github.com/cbwinslow/baseballdatabank) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) | Credit Sean Lahman and carry the same license in any derivative work. |
-| [Chadwick Baseball Bureau Register](https://github.com/chadwickbureau/register) | [ODC-BY 1.0](https://opendatacommons.org/licenses/by/1.0/) | Credit the Chadwick Baseball Bureau when publishing work that uses the player ID crosswalk. |
+| [Chadwick Baseball Bureau Register](https://github.com/chadwickbureau/register) | [ODC-BY 1.0](https://opendatacommons.org/licenses/by/1-0/) | Credit the Chadwick Baseball Bureau when publishing work that uses the player ID crosswalk. |
 | [FanGraphs WAR Leaderboards](https://www.fangraphs.com) | Copyright FanGraphs | Do not redistribute the fetched data. |
 | [Baseball Savant / Statcast](https://baseballsavant.mlb.com/) | Copyright MLB Advanced Media | Do not redistribute the fetched data. |
 | USA Today / Spotrac salary data | Proprietary — ToS applies | See [`data-raw/README.md`](data-raw/README.md). Do not redistribute. |
