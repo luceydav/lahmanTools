@@ -76,11 +76,16 @@ Introspect: `SHOW TABLES`, `DESCRIBE <tbl>`, `SUMMARIZE <tbl>`, `dm::dm_from_con
 macOS sandbox blocks git operations in the project directory. **All git ops go through `/tmp/lahmans-git-work/`:**
 
 ```bash
+PROJ=/Users/davidlucey/Documents/Projects/lahmans
 rsync -a --exclude='.git' --exclude='*.duckdb' $PROJ/ /tmp/lahmans-git-work/
 # git add / commit / push / gh pr from /tmp/lahmans-git-work/
 rsync -a /tmp/lahmans-git-work/.git/refs/ $PROJ/.git/refs/
 rsync -a /tmp/lahmans-git-work/.git/objects/ $PROJ/.git/objects/
+# REQUIRED after every commit: reset project index to HEAD or staged changes accumulate
+cd $PROJ && git reset
 ```
+
+**Critical:** The rsync only syncs `.git/refs/` and `.git/objects/` — it does NOT sync `.git/index`. Without `git reset` after each commit, the project's staging area drifts from HEAD and builds up a backlog of phantom staged changes across sessions. Always run `git reset` in the project dir as the final step.
 
 `git checkout` in the project dir will fail — files are correct but the local branch pointer may lag.
 

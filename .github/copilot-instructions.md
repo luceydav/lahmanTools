@@ -79,7 +79,11 @@ rm -rf /tmp/lahmans-git-work/.git/refs/refs 2>/dev/null || true  # remove stale 
 # git add / commit / push from /tmp/lahmans-git-work/
 rsync -a /tmp/lahmans-git-work/.git/refs/ $PROJ/.git/refs/
 rsync -a /tmp/lahmans-git-work/.git/objects/ $PROJ/.git/objects/
+# REQUIRED after every commit: reset project index to HEAD or staged changes accumulate
+cd $PROJ && git reset
 ```
+
+**Critical:** The rsync only syncs `.git/refs/` and `.git/objects/` — it does NOT sync `.git/index`. Without `git reset` after each commit, the project's staging area drifts from HEAD and builds up a backlog of phantom staged changes across sessions. Always run `git reset` in the project dir as the final step.
 
 **Branch strategy:**
 - All work commits go to `dev` — **never commit directly to `main`**
