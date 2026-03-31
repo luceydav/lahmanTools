@@ -40,7 +40,8 @@ stub_all_tables <- function(con) {
     )")
   DBI::dbExecute(con, "
     CREATE TABLE People (
-      playerID VARCHAR, birthYear INTEGER, debut VARCHAR
+      playerID VARCHAR, birthYear INTEGER, debut VARCHAR,
+      nameFirst VARCHAR, nameLast VARCHAR
     )")
   # SalariesAll is normally a view created by setup_baseball_db(); stub as a
   # table here so LeagueMedianSalary and TeamPayroll can reference it.
@@ -48,6 +49,50 @@ stub_all_tables <- function(con) {
     CREATE TABLE SalariesAll (
       yearID INTEGER, teamID VARCHAR, lgID VARCHAR,
       playerID VARCHAR, salary DOUBLE, is_actual BOOLEAN
+    )")
+  DBI::dbExecute(con, "
+    CREATE TABLE SeriesPost (
+      yearID INTEGER, round VARCHAR,
+      teamIDwinner VARCHAR, lgIDwinner VARCHAR,
+      teamIDloser VARCHAR, lgIDloser VARCHAR,
+      wins INTEGER, losses INTEGER, ties INTEGER
+    )")
+  DBI::dbExecute(con, "
+    CREATE TABLE AllstarFull (
+      playerID VARCHAR, yearID INTEGER, gameNum INTEGER,
+      gameID VARCHAR, teamID VARCHAR, lgID VARCHAR,
+      GP INTEGER, startingPos VARCHAR
+    )")
+  DBI::dbExecute(con, "
+    CREATE TABLE AwardsPlayers (
+      playerID VARCHAR, awardID VARCHAR, yearID INTEGER,
+      lgID VARCHAR, tie VARCHAR, notes VARCHAR
+    )")
+  DBI::dbExecute(con, "
+    CREATE TABLE HallOfFame (
+      playerID VARCHAR, yearID INTEGER, votedBy VARCHAR,
+      ballots DOUBLE, needed DOUBLE, votes DOUBLE,
+      inducted VARCHAR, category VARCHAR, needed_note VARCHAR
+    )")
+  DBI::dbExecute(con, "
+    CREATE TABLE Appearances (
+      yearID INTEGER, teamID VARCHAR, lgID VARCHAR, playerID VARCHAR,
+      G_all INTEGER, GS INTEGER, G_batting INTEGER, G_defense INTEGER,
+      G_p INTEGER, G_c INTEGER, G_1b INTEGER, G_2b INTEGER,
+      G_3b INTEGER, G_ss INTEGER, G_lf INTEGER, G_cf INTEGER,
+      G_rf INTEGER, G_of INTEGER, G_dh INTEGER, G_ph INTEGER, G_pr INTEGER
+    )")
+  DBI::dbExecute(con, "
+    CREATE TABLE Managers (
+      playerID VARCHAR, yearID INTEGER, teamID VARCHAR, lgID VARCHAR,
+      inseason INTEGER, G INTEGER, W INTEGER, L INTEGER,
+      rank INTEGER, plyrMgr VARCHAR
+    )")
+  # PlayerWAR is normally created by load_fangraphs_war(); stub for view tests
+  DBI::dbExecute(con, "
+    CREATE TABLE PlayerWAR (
+      playerID VARCHAR, yearID INTEGER,
+      bWAR DOUBLE, pWAR DOUBLE
     )")
 }
 
@@ -68,7 +113,9 @@ test_that("create_stats_views() creates all expected views and macros", {
 
   objects <- DBI::dbListTables(con)
   for (nm in c("BattingStats", "PitchingStats", "FieldingStats",
-               "PlayerAcquisitionType", "LeagueMedianSalary", "TeamPayroll")) {
+               "PlayerAcquisitionType", "LeagueMedianSalary", "TeamPayroll",
+               "PlayoffPayroll", "AllStarConcentration", "AwardSalaryPremium",
+               "HOFCareerArc", "PositionalPayroll", "ManagerPerformance")) {
     expect_true(nm %in% objects, label = paste("missing:", nm))
   }
   # era_label is a macro, not a table; verify it executes without error
@@ -119,9 +166,9 @@ test_that("PlayerAcquisitionType classifies homegrown, young_acq, veteran_acq", 
   # homegrown: debut year == first year with this team
   # young_acq: arrived post-debut, age < 26 on arrival
   # veteran_acq: arrived post-debut, age >= 26 on arrival
-  DBI::dbExecute(con, "INSERT INTO People VALUES ('p1', 1990, '2010-04-01')")  # homegrown
-  DBI::dbExecute(con, "INSERT INTO People VALUES ('p2', 1993, '2013-04-01')")  # young_acq
-  DBI::dbExecute(con, "INSERT INTO People VALUES ('p3', 1980, '2000-04-01')")  # veteran_acq
+  DBI::dbExecute(con, "INSERT INTO People VALUES ('p1', 1990, '2010-04-01', 'Alpha', 'One')")  # homegrown
+  DBI::dbExecute(con, "INSERT INTO People VALUES ('p2', 1993, '2013-04-01', 'Beta', 'Two')")  # young_acq
+  DBI::dbExecute(con, "INSERT INTO People VALUES ('p3', 1980, '2000-04-01', 'Gamma', 'Three')")  # veteran_acq
 
   DBI::dbExecute(con, "INSERT INTO Batting (playerID, yearID, teamID) VALUES ('p1', 2010, 'NYN')")
   # p2 debuted 2013 elsewhere, joins NYN at age 24 in 2017
@@ -329,4 +376,159 @@ test_that("FieldingStats computes correct metrics", {
 
   # RF/G = (PO + A) / G = 450 / 150 = 3.0
   expect_equal(fs$RF_G, 3.0, tolerance = 1e-6)
+})
+
+test_that("PlayoffPayroll has expected columns and returns rows for seeded data", {
+  con <- DBI::dbConnect(duckdb::duckdb(), dbdir = ":memory:")
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  stub_all_tables(con)
+
+  DBI::dbExecute(con, "
+    INSERT INTO SeriesPost VALUES (2023,'WS','TEX','AL','ARI','NL',4,1,0)")
+  DBI::dbExecute(con, "
+    INSERT INTO Teams (yearID, lgID, teamID, name, park, W, L, G,
+      R, H, HR, BB, SO, RA, ER, ERA, CG, SHO, IPouts,
+      HA, HRA, BBA, SOA, E, DP, FP)
+    VALUES (2023,'AL','TEX','Texas Rangers','GlobeLife',90,72,162,
+      800,1400,200,500,1300,700,650,3.80,10,12,4374,
+      1350,180,480,1250,95,130,0.985)")
+  DBI::dbExecute(con, "
+    INSERT INTO SalariesAll VALUES (2023,'TEX','AL','player01',5000000,TRUE)")
+  create_stats_views(con)
+
+  pp <- DBI::dbGetQuery(con, "SELECT * FROM PlayoffPayroll WHERE yearID = 2023")
+  expect_true(nrow(pp) >= 1L)
+  expect_true(all(c("yearID","teamID","total_salary","rounds_won","won_ws","era") %in% names(pp)))
+  expect_equal(pp$won_ws[pp$teamID == "TEX"], 1L)
+})
+
+test_that("AllStarConcentration has expected columns and aggregates correctly", {
+  con <- DBI::dbConnect(duckdb::duckdb(), dbdir = ":memory:")
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  stub_all_tables(con)
+
+  DBI::dbExecute(con, "
+    INSERT INTO AllstarFull VALUES
+      ('plyr01', 2010, 0, 'ALS2010', 'NYA', 'AL', 1, 'SS'),
+      ('plyr02', 2010, 0, 'ALS2010', 'NYA', 'AL', 1, NULL)")
+  DBI::dbExecute(con, "
+    INSERT INTO SalariesAll VALUES
+      (2010,'NYA','AL','plyr01',10000000,TRUE),
+      (2010,'NYA','AL','plyr02', 5000000,TRUE),
+      (2010,'NYA','AL','plyr03', 2000000,TRUE)")
+  DBI::dbExecute(con, "
+    INSERT INTO Teams (yearID, lgID, teamID, name, park, W, L, G,
+      R, H, HR, BB, SO, RA, ER, ERA, CG, SHO, IPouts,
+      HA, HRA, BBA, SOA, E, DP, FP)
+    VALUES (2010,'AL','NYA','New York Yankees','Yankee Stadium',95,67,162,
+      850,1500,210,520,1350,720,670,3.90,8,14,4400,
+      1400,185,495,1280,90,135,0.987)")
+  create_stats_views(con)
+
+  ac <- DBI::dbGetQuery(con, "SELECT * FROM AllStarConcentration WHERE yearID = 2010 AND teamID = 'NYA'")
+  expect_equal(nrow(ac), 1L)
+  expect_equal(ac$n_allstars, 2L)
+  expect_equal(ac$n_allstar_starts, 1L)
+  expect_true(all(c("allstar_rate","total_salary","era") %in% names(ac)))
+})
+
+test_that("AwardSalaryPremium filters to key awards and computes salary_delta", {
+  con <- DBI::dbConnect(duckdb::duckdb(), dbdir = ":memory:")
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  stub_all_tables(con)
+
+  DBI::dbExecute(con, "
+    INSERT INTO People VALUES ('mvp01', 1978, '2005-04-01', 'Mike', 'Vee')")
+  DBI::dbExecute(con, "
+    INSERT INTO AwardsPlayers VALUES
+      ('mvp01','Most Valuable Player',2010,'AL',NULL,NULL),
+      ('mvp01','Unimportant Award',    2011,'AL',NULL,NULL)")
+  DBI::dbExecute(con, "
+    INSERT INTO SalariesAll VALUES
+      (2010,'NYA','AL','mvp01', 8000000,TRUE),
+      (2011,'NYA','AL','mvp01',18000000,TRUE)")
+  DBI::dbExecute(con, "
+    INSERT INTO PlayerWAR VALUES ('mvp01',2010,6.5,0.0),('mvp01',2011,5.2,0.0)")
+  create_stats_views(con)
+
+  asp <- DBI::dbGetQuery(con, "SELECT * FROM AwardSalaryPremium WHERE playerID = 'mvp01'")
+  expect_equal(nrow(asp), 1L)
+  expect_equal(asp$awardID, "Most Valuable Player")
+  expect_equal(asp$salary_delta, 10000000)
+})
+
+test_that("HOFCareerArc includes only inducted players and has era column", {
+  con <- DBI::dbConnect(duckdb::duckdb(), dbdir = ":memory:")
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  stub_all_tables(con)
+
+  DBI::dbExecute(con, "INSERT INTO People VALUES ('hof01', 1960, '1985-04-08', 'Hank', 'Hofmann')")
+  DBI::dbExecute(con, "
+    INSERT INTO HallOfFame VALUES
+      ('hof01',2005,'BBWAA',520,390,450,'Y','Player',NULL),
+      ('notyet',2010,'BBWAA',510,383,200,'N','Player',NULL)")
+  DBI::dbExecute(con, "
+    INSERT INTO PlayerWAR VALUES ('hof01',2000,7.2,0.0),('hof01',2001,5.1,0.0)")
+  DBI::dbExecute(con, "
+    INSERT INTO SalariesAll VALUES
+      (2000,'NYA','AL','hof01',6000000,TRUE),
+      (2001,'NYA','AL','hof01',7500000,TRUE)")
+  create_stats_views(con)
+
+  arc <- DBI::dbGetQuery(con, "SELECT * FROM HOFCareerArc ORDER BY yearID")
+  expect_true(nrow(arc) >= 2L)
+  expect_true(all(arc$playerID == "hof01"))
+  expect_true("years_before_induction" %in% names(arc))
+  expect_true("era" %in% names(arc))
+})
+
+test_that("PositionalPayroll assigns primary position from Appearances", {
+  con <- DBI::dbConnect(duckdb::duckdb(), dbdir = ":memory:")
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  stub_all_tables(con)
+
+  # Player appeared mostly at SS (80 games) vs 2B (20 games)
+  DBI::dbExecute(con, "
+    INSERT INTO Appearances VALUES
+      (2015,'NYA','AL','pos01',
+       100, 98, 100, 100,
+       0, 0, 0, 20, 0, 80, 0, 0, 0, 80, 0, 0, 0)")
+  DBI::dbExecute(con, "
+    INSERT INTO SalariesAll VALUES (2015,'NYA','AL','pos01',4000000,TRUE)")
+  DBI::dbExecute(con, "
+    INSERT INTO PlayerWAR VALUES ('pos01',2015,3.5,0.0)")
+  create_stats_views(con)
+
+  pp <- DBI::dbGetQuery(con, "SELECT * FROM PositionalPayroll WHERE playerID = 'pos01'")
+  expect_equal(nrow(pp), 1L)
+  expect_equal(pp$primary_pos, "SS")
+  expect_true("salary_per_war" %in% names(pp))
+})
+
+test_that("ManagerPerformance computes win_pct and joins payroll", {
+  con <- DBI::dbConnect(duckdb::duckdb(), dbdir = ":memory:")
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  stub_all_tables(con)
+
+  DBI::dbExecute(con, "INSERT INTO People VALUES ('mgr01', 1955, '1975-04-01', 'Bob', 'Manager')")
+  DBI::dbExecute(con, "
+    INSERT INTO Managers VALUES ('mgr01',2018,'BOS','AL',1,162,108,54,1,NULL)")
+  DBI::dbExecute(con, "
+    INSERT INTO Teams (yearID, lgID, teamID, name, park, W, L, G,
+      R, H, HR, BB, SO, RA, ER, ERA, CG, SHO, IPouts,
+      HA, HRA, BBA, SOA, E, DP, FP)
+    VALUES (2018,'AL','BOS','Boston Red Sox','Fenway Park',108,54,162,
+      876,1490,208,514,1290,647,603,3.75,9,16,4374,
+      1290,172,472,1303,86,128,0.988)")
+  DBI::dbExecute(con, "
+    INSERT INTO SalariesAll VALUES
+      (2018,'BOS','AL','plyrA',10000000,TRUE),
+      (2018,'BOS','AL','plyrB', 8000000,TRUE)")
+  create_stats_views(con)
+
+  mp <- DBI::dbGetQuery(con, "SELECT * FROM ManagerPerformance WHERE playerID = 'mgr01'")
+  expect_equal(nrow(mp), 1L)
+  expect_equal(mp$win_pct, 108 / 162, tolerance = 1e-6)
+  expect_equal(mp$total_salary, 18000000)
+  expect_true("era" %in% names(mp))
 })

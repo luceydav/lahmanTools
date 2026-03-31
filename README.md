@@ -4,79 +4,22 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Data: CC BY-SA 3.0](https://img.shields.io/badge/Data-CC%20BY--SA%203.0-blue.svg)](https://creativecommons.org/licenses/by-sa/3.0/)
 
-`lahmanTools` loads the [Lahman](https://cran.r-project.org/package=Lahman) baseball database (1871–2025) into a persistent **DuckDB** instance and supplements it with salary data through 2025 (via Spotrac and USA Today) and FanGraphs WAR back to 1985. Pre-built SQL views handle the common sabermetric patterns — OPS, FIP, salary-per-WAR, team payroll, acquisition type. Connect the database to **GitHub Copilot CLI** or **Claude** via the included MCP server config and query 150 years of baseball in plain English.
+`lahmanTools` downloads all 27 [Lahman](http://www.seanlahman.com/) baseball tables (1871–2025) directly from the [Chadwick Bureau baseballdatabank](https://github.com/cbwinslow/baseballdatabank) into a persistent **DuckDB** instance, and supplements it with salary data through 2025 (via Spotrac and USA Today) and FanGraphs WAR back to 1985. Pre-built SQL views handle the common sabermetric patterns — OPS, FIP, salary-per-WAR, team payroll, acquisition type, playoff efficiency, positional pay, and more. Connect the database to **GitHub Copilot CLI** or **Claude** via the included MCP server config and query 150 years of baseball in plain English.
 
 Analysis in R runs via `data.table` and plain SQL — no tidyverse dependency, no loading 30+ tables into memory. DuckDB executes columnar SQL directly on the file, so aggregations across the full history run in milliseconds.
-
-## Data model
-
-All 27 Lahman tables are loaded into DuckDB. The diagram shows the 20 primary tables,
-colour-coded by functional group, with arrows for primary-key → foreign-key relationships.
-
-![lahmanTools schema](man/figures/lahmanTools_schema.svg)
-
-| Colour | Group | Tables |
-|--------|-------|--------|
-| 🔵 Blue | Identity spine | `People`, `Teams`, `TeamsFranchises` |
-| 🟢 Green | Regular-season | `Batting`, `Pitching`, `Fielding`, `Appearances` |
-| 🟣 Purple | Postseason | `BattingPost`, `PitchingPost`, `FieldingPost` |
-| 🩷 Pink | Salary | `Salaries` |
-| 🟠 Orange | Honours | `AwardsPlayers`, `AllstarFull`, `HallOfFame` |
-| 🩵 Teal | Management | `Managers` |
-| 🤎 Brown | College | `CollegePlaying`, `Schools` |
-| ⚫ Grey | Lookups | `Parks`, `HomeGames`, `SeriesPost` |
-
-To regenerate after schema changes: `Rscript analysis/schema_dm.R` (requires `dm`, `DiagrammeR`, `DiagrammeRsvg`).
-
-### Derived views and macros
-
-Ten views and one scalar macro are created by `setup_baseball_db()`.
-Query them directly via SQL — no R wrangling required for the common patterns.
-
-**Per-player stats views** (one row per player-year-stint-team):
-
-| View | Base tables | Key metrics |
-|------|-------------|-------------|
-| `BattingStats` | `Batting` | PA, AVG, OBP, SLG, OPS, ISO, BABIP, BB%, K% |
-| `PitchingStats` | `Pitching`, `Teams` | IP, ERA, WHIP, K/9, BB/9, HR/9, FIP, K/BB |
-| `FieldingStats` | `Fielding` | FPCT, RF/9, RF/G by position |
-| `SalariesAll` | `Salaries`, `SalariesSpotrac`, `SalariesUSAToday` | Lahman (1985-2016) + Spotrac (2017-2021) + USA Today (2022-2025); filter `is_actual = TRUE` for confirmed figures |
-
-**WAR and salary efficiency views** (require `load_war = TRUE`; see [Setup](#setup)):
-
-| View | Description |
-|------|-------------|
-| `PlayerIDs` | Lahman `playerID` joined to MLBAM, FanGraphs, Retrosheet, and BBREF IDs via Chadwick crosswalk |
-| `PlayerWAR` | `bat_war` + `pit_war` + `total_war` per player-season (1985+) |
-| `SalaryPerWAR` | `dollars_per_war` by player-season with `era` label |
-
-**Analytical views** (pre-built patterns for multi-era salary analysis):
-
-| View | Description |
-|------|-------------|
-| `PlayerAcquisitionType` | One row per player-team; `acq_type` is `homegrown`, `young_acq` (arrived pre-26), or `veteran_acq` |
-| `LeagueMedianSalary` | League-wide `med_sal`, `avg_sal`, `n_players` by season — use for `salary / med_sal` normalisation |
-| `TeamPayroll` | `total_salary`, `n_players`, `median_salary`, `max_salary` by team-season |
-
-**Scalar macro** (callable in any SQL query):
-
-| Macro | Usage | Returns |
-|-------|-------|---------|
-| `era_label(yr)` | `SELECT era_label(yearID) AS era …` | `'Pre-Moneyball'` / `'Moneyball'` / `'Big Data'` / `NULL` |
 
 ## Requirements
 
 - R ≥ 4.1.0
-- [`Lahman`](https://cran.r-project.org/package=Lahman) R package (source data)
 - [`duckdb`](https://cran.r-project.org/package=duckdb) R package
 - [`data.table`](https://cran.r-project.org/package=data.table) R package
+- Internet connection (tables are downloaded from GitHub during setup)
 
 ## Installation
 
 ```r
 # install.packages("pak")
 pak::pak("luceydav/lahmanTools")
-install.packages("Lahman")   # source data
 ```
 
 ## Setup
@@ -140,6 +83,67 @@ load_fangraphs_war(con)          # WAR + SalaryPerWAR (requires Chadwick first)
 load_statcast(con, years = 2023) # Statcast pitch data (2015+; ~700 MB/season)
 DBI::dbDisconnect(con, shutdown = TRUE)
 ```
+
+## Data model
+
+All 27 Lahman tables are downloaded from the [Chadwick Bureau baseballdatabank](https://github.com/cbwinslow/baseballdatabank) into DuckDB. The diagram shows the 20 primary tables, colour-coded by functional group, with arrows for primary-key → foreign-key relationships.
+
+![lahmanTools schema](man/figures/lahmanTools_schema.svg)
+
+| Colour | Group | Tables |
+|--------|-------|--------|
+| 🔵 Blue | Identity spine | `People`, `Teams`, `TeamsFranchises` |
+| 🟢 Green | Regular-season | `Batting`, `Pitching`, `Fielding`, `Appearances` |
+| 🟣 Purple | Postseason | `BattingPost`, `PitchingPost`, `FieldingPost` |
+| 🩷 Pink | Salary | `Salaries` |
+| 🟠 Orange | Honours | `AwardsPlayers`, `AllstarFull`, `HallOfFame` |
+| 🩵 Teal | Management | `Managers` |
+| 🤎 Brown | College | `CollegePlaying`, `Schools` |
+| ⚫ Grey | Lookups | `Parks`, `HomeGames`, `SeriesPost` |
+
+To regenerate after schema changes: `Rscript analysis/schema_dm.R` (requires `dm`, `DiagrammeR`, `DiagrammeRsvg`).
+
+### Derived views and macros
+
+Sixteen views and one scalar macro are created by `setup_baseball_db()` and `create_stats_views()`.
+Query them directly via SQL — no R wrangling required for the common patterns.
+
+**Per-player stats views** (one row per player-year-stint-team):
+
+| View | Base tables | Key metrics |
+|------|-------------|-------------|
+| `BattingStats` | `Batting` | PA, AVG, OBP, SLG, OPS, ISO, BABIP, BB%, K% |
+| `PitchingStats` | `Pitching`, `Teams` | IP, ERA, WHIP, K/9, BB/9, HR/9, FIP, K/BB |
+| `FieldingStats` | `Fielding` | FPCT, RF/9, RF/G by position |
+| `SalariesAll` | `Salaries`, `SalariesSpotrac`, `SalariesUSAToday` | Chadwick Bureau (1985-2016) + Spotrac (2017-2021) + USA Today (2022-2025); filter `is_actual = TRUE` for confirmed figures |
+
+**WAR and salary efficiency views** (require `load_war = TRUE`; see [Setup](#setup)):
+
+| View | Description |
+|------|-------------|
+| `PlayerIDs` | Lahman `playerID` joined to MLBAM, FanGraphs, Retrosheet, and BBREF IDs via Chadwick crosswalk |
+| `PlayerWAR` | `bWAR` + `pWAR` + `total_war` per player-season (1985+) |
+| `SalaryPerWAR` | `dollars_per_war` by player-season with `era` label |
+
+**Analytical views** (pre-built patterns for multi-era analysis):
+
+| View | Description |
+|------|-------------|
+| `PlayerAcquisitionType` | One row per player-team; `acq_type` is `homegrown`, `young_acq` (arrived pre-26), or `veteran_acq` |
+| `LeagueMedianSalary` | League-wide `med_sal`, `avg_sal`, `n_players` by season — use for `salary / med_sal` normalisation |
+| `TeamPayroll` | `total_salary`, `n_players`, `median_salary`, `max_salary` by team-season |
+| `PlayoffPayroll` | Team payroll by playoff round reached; `rounds_won`, `won_ws` flag — does spending buy championships? |
+| `AllStarConcentration` | All-Star selections per team-season with payroll; `allstar_rate` for star-vs-depth analysis |
+| `AwardSalaryPremium` | Salary and WAR before/after MVP, Cy Young, Gold Glove, and ROY — quantifies award-driven contract premiums (requires `load_war = TRUE`) |
+| `HOFCareerArc` | Inducted HOF players with season WAR and salary; `years_before_induction` aligns careers for peak-vs-pay analysis (requires `load_war = TRUE`) |
+| `PositionalPayroll` | Salary, WAR, and salary/WAR by primary position and era — reveals which positions are over- or under-paid (requires `load_war = TRUE`) |
+| `ManagerPerformance` | Manager W-L%, division finish rank, and team payroll per season |
+
+**Scalar macro** (callable in any SQL query):
+
+| Macro | Usage | Returns |
+|-------|-------|---------|
+| `era_label(yr)` | `SELECT era_label(yearID) AS era …` | `'Pre-Moneyball'` / `'Moneyball'` / `'Big Data'` / `NULL` |
 
 ## Usage
 
@@ -302,7 +306,7 @@ the source license.
 
 | Source | License | Obligation |
 |--------|---------|------------|
-| [Sean Lahman Baseball Database](http://www.seanlahman.com/) | [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) | Credit Sean Lahman and carry the same license in any derivative work. |
+| [Sean Lahman Baseball Database](http://www.seanlahman.com/) via [cbwinslow/baseballdatabank](https://github.com/cbwinslow/baseballdatabank) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) | Credit Sean Lahman and carry the same license in any derivative work. |
 | [Chadwick Baseball Bureau Register](https://github.com/chadwickbureau/register) | [ODC-BY 1.0](https://opendatacommons.org/licenses/by/1.0/) | Credit the Chadwick Baseball Bureau when publishing work that uses the player ID crosswalk. |
 | [FanGraphs WAR Leaderboards](https://www.fangraphs.com) | Copyright FanGraphs | Do not redistribute the fetched data. |
 | [Baseball Savant / Statcast](https://baseballsavant.mlb.com/) | Copyright MLB Advanced Media | Do not redistribute the fetched data. |

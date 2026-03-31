@@ -21,6 +21,28 @@
 * Core `Imports` reduced to `DBI`, `duckdb`, `data.table`, `httr2`, `rvest`,
   `xml2`. `Lahman` moved to `Suggests`.
 
+## New views in `create_stats_views()`
+
+Six additional analytical views are now created by `create_stats_views()`:
+
+* `PlayoffPayroll` -- team payroll for each playoff round; `rounds_won` and
+  `won_ws` flag; supports payroll-to-championship analysis.
+* `AllStarConcentration` -- All-Star selections per team-season with payroll;
+  `allstar_rate` = All-Stars / roster size; use for star concentration vs.
+  depth comparisons.
+* `AwardSalaryPremium` -- salary and WAR in the award year and following year
+  for MVP, Cy Young, Gold Glove, and Rookie of the Year winners; quantifies
+  the contract premium following major awards. Requires `PlayerWAR` (i.e.,
+  `setup_baseball_db(load_war = TRUE)`).
+* `HOFCareerArc` -- inducted Hall of Fame players with season-level WAR and
+  salary; `years_before_induction` aligns careers for peak-vs-pay analysis.
+  Requires `PlayerWAR`.
+* `PositionalPayroll` -- salary, WAR, and salary/WAR by primary position
+  (derived from `Appearances`) and era; reveals which positions are
+  systematically over- or under-paid.  Requires `PlayerWAR`.
+* `ManagerPerformance` -- manager W-L%, division finish rank, and team payroll
+  per season; supports payroll efficiency vs. manager analysis.
+
 # lahmanTools (development)
 
 ## Breaking changes
