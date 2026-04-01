@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "baseball": {
+      "type": "stdio",
+      "command": "python3",
+      "args": [
+        "-c",
+        "import os, subprocess; db=os.path.join(os.environ.get('LAHMANS_DBDIR', os.path.expanduser('~/Documents/Data/baseball')), 'baseball.duckdb'); subprocess.run(['duckdb-mcp-server', '--db-path', db, '--readonly'])"
+      ]
+    },
+    "r-btw": {
+      "type": "stdio",
+      "command": "Rscript",
+      "args": ["-e", "btw::btw_mcp_server()"]
+    }
+  }
+}
