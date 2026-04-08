@@ -24,30 +24,49 @@ knitr::opts_chunk$set(
 )
 ```
 
-## Overview
+## Background: What is WAR?
 
-This vignette walks through a two-stage analysis of MLB franchise management
-efficiency covering 1995–2021 (excluding the anomalous 2020 bubble season).
+**Wins Above Replacement (WAR)** measures how many more wins a player contributed
+than a freely available minor-league call-up would have.  A WAR of 5 means the
+player was worth 5 extra wins to his team.  FanGraphs publishes separate WAR for
+batters (fWAR: hitting + baserunning + fielding) and pitchers (FIP-based).  We
+use FanGraphs WAR here because it extends back to 1985 and is available via the
+`baseballr` package.
 
-**Stage 1 — Getting to October:** How efficiently does a franchise convert
-payroll dollars into playoff appearances? Dimensions:
+| WAR range | Interpretation |
+|----------:|----------------|
+| < 0 | Below replacement level |
+| 0–2 | Bench / back-of-rotation player |
+| 2–5 | Solid regular or mid-rotation starter |
+| 5–8 | All-Star calibre |
+| > 8 | MVP / Cy Young calibre |
 
-- Veteran free-agent cost ($/WAR)
-- Dead-money burden (salary paid to ≤0-WAR players)
-- Homegrown pipeline (% of roster WAR from drafted/developed players)
+## The Question We Are Answering
 
-**Stage 2 — Going Deep:** Among teams that *make* the playoffs, which ones
-convert appearances into deep runs? Dimensions:
+Every team can buy payroll.  The question is: **who converts dollars into wins,
+playoff appearances, and ultimately World Series rings — and why do some
+franchises consistently fail to do so despite spending heavily?**
 
-- Regular-season WAR rank among that year's playoff field
-- Postseason WAR retention (RS production that actually showed up in October)
-- Playoff achievement score (WC win = 1 pt, DS = 2, LCS = 4, WS = 8)
+We score each franchise across five management dimensions using percentile ranks:
 
-The analysis uses:
+1. **FA efficiency** — median $/WAR paid to veteran free agents
+2. **Dead money** — salary committed to players who produced zero or negative WAR
+3. **Homegrown pipeline** — share of WAR from players developed internally
+4. **October WAR retention** — how much of a team's regular-season talent showed
+   up in the postseason (proxy for health and roster depth)
+5. **Playoff achievement** — how deep teams went when they made the postseason
 
-- **Lahman Baseball Database** (team stats, postseason tables, salary 1985–2016)
+## Data Coverage
+
+- **Lahman Baseball Database** — team stats, postseason tables (`SeriesPost`,
+  `BattingPost`, `PitchingPost`), and salary data through 2021
 - **FanGraphs WAR** via `baseballr` (1985–2025)
-- **Spotrac / USA Today salary data** (2017–2025, in `SalariesAll` view)
+- **Spotrac / USA Today salary data** (2017–2025, combined in `SalariesAll` view)
+
+All playoff-dependent metrics (achievement scores, WAR retention proxy) are
+capped at 2021 because the Lahman postseason tables do not extend beyond that year.
+Salary and WAR data extend to 2025 but are shown here on the same 1995–2021
+window for consistency.
 
 ```{r prereqs, eval=FALSE}
 # Prerequisites: database must be built first
@@ -92,18 +111,16 @@ fran_map <- qry("
   WHERE t.yearID BETWEEN 1995 AND 2021
 ")
 short_names <- c(
-  NYA = "Yankees",   NYN = "Mets",      LAN = "Dodgers",
-  BOS = "Red Sox",   OAK = "Athletics", TBD = "Rays",
-  HOU = "Astros",    ATL = "Braves",    ARI = "D-Backs",
-  CHC = "Cubs",      CHN = "Cubs",      SFN = "Giants",
-  SLN = "Cardinals", PHI = "Phillies",  CLE = "Guardians",
-  MIN = "Twins",     DET = "Tigers",    SEA = "Mariners",
-  TEX = "Rangers",   BAL = "Orioles",   TOR = "Blue Jays",
-  KCA = "Royals",    MIL = "Brewers",   MIA = "Marlins",
-  FLA = "Marlins",   CIN = "Reds",      SDN = "Padres",
-  COL = "Rockies",   ANA = "Angels",    WAS = "Nationals",
-  MON = "Expos",     CHA = "White Sox", PIT = "Pirates",
-  ML4 = "Brewers",   CAL = "Angels",    FLO = "Marlins"
+  NYY = "Yankees",  NYM = "Mets",    LAD = "Dodgers",
+  BOS = "Red Sox",  OAK = "Athletics", TBD = "Rays",
+  HOU = "Astros",   ATL = "Braves",  ARI = "D-Backs",
+  CHC = "Cubs",     SFG = "Giants",  STL = "Cardinals",
+  PHI = "Phillies", CLE = "Guardians", MIN = "Twins",
+  DET = "Tigers",   SEA = "Mariners", TEX = "Rangers",
+  BAL = "Orioles",  TOR = "Blue Jays", KCR = "Royals",
+  MIL = "Brewers",  FLA = "Marlins",  CIN = "Reds",
+  SDP = "Padres",   COL = "Rockies", ANA = "Angels",
+  WSN = "Nationals", CHW = "White Sox", PIT = "Pirates"
 )
 fran_map[, short := short_names[franchID]]
 fran_map[is.na(short), short := franchID]
@@ -359,20 +376,17 @@ stage1 <- stage1[!is.na(short)]
 ```{r chart-stage1}
 #| eval: !expr !is.na(Sys.getenv("LAHMANS_DBDIR", unset = NA))
 #| fig-cap: "Stage 1: efficient franchises appear in the upper-left (low $/WAR, high playoff rate). Bubble size = dead-money burden; blue fill = strong homegrown pipeline."
-HIGHLIGHTS <- c("NYA","NYN","LAN","BOS","OAK","TBD","HOU","ATL")
-stage1[, label := ifelse(franchID %in% HIGHLIGHTS, short, NA_character_)]
-
 ggplot(stage1, aes(fa_m_per_war, playoff_rate * 100)) +
   geom_point(aes(size = dead_pct, fill = hg_war_pct),
-             shape = 21, colour = "white", alpha = 0.9) +
-  geom_label_repel(aes(label = label), size = 3.2, fontface = "bold",
-                   box.padding = 0.4, na.rm = TRUE, seed = 42) +
+             shape = 21, colour = "grey30", alpha = 0.9) +
+  geom_label_repel(aes(label = short), size = 3.0, fontface = "bold",
+                   box.padding = 0.4, max.overlaps = 30, seed = 42,
+                   min.segment.length = 0.2) +
   scale_fill_gradient(low = "#D6604D", high = "#2166AC",
                       name = "Homegrown WAR (%)") +
-  scale_size_continuous(range = c(2, 9),
-                        name = "Dead money\n(% payroll)") +
+  scale_size_continuous(range = c(2, 9), name = "Dead money (% payroll)") +
   scale_x_continuous(labels = dollar_format(suffix = "M"),
-                     name = "Median $/WAR for veteran free agents") +
+                     name = "Median $/WAR for veteran FAs (lower = more efficient)") +
   scale_y_continuous(name = "Playoff appearance rate (%)",
                      labels = function(x) paste0(x, "%")) +
   labs(
@@ -474,17 +488,29 @@ ggplot(stage2_plot, aes(avg_rs_war_rank, avg_achievement)) +
 
 ## Synthesis Scorecard
 
-All five dimensions combined into a single percentile-rank heatmap.
+All five dimensions combined into a single percentile-rank heatmap. Rows are
+sorted by the **Overall** column — the simple mean of all five percentile ranks.
+
+::: callout-note
+**How to read this chart:** A score of 100 means that franchise ranked best
+among all qualifying franchises on that dimension. Scores of 0 are worst.
+The rightmost column (**OVERALL**) is the simple mean across all five
+dimensions and determines the row sort order.
+
+**Why the Red Sox appear mid-table despite a 95th-percentile Playoff Achievement
+score:** They also rank near the bottom on FA Efficiency and Dead Money, dragging
+their Overall mean to a middling position. High achievement came at high cost.
+:::
 
 ```{r scorecard}
 #| eval: !expr !is.na(Sys.getenv("LAHMANS_DBDIR", unset = NA))
 #| fig-height: 9
-#| fig-cap: "Percentile rank (100 = best franchise on that metric). Franchises with 5+ playoff appearances only."
+#| fig-cap: "Rows sorted by OVERALL = mean of 5 dimension percentile ranks. The rightmost column shows that overall rank. Red = bottom of league; Blue = top."
 syn <- Reduce(
   function(a, b) merge(a, b, by = "franchID", all.x = TRUE),
   list(
     stage1[, .(franchID, short, fa_m_per_war, playoff_rate, dead_pct, hg_war_pct)],
-    stage2[, .(franchID, avg_achievement, avg_war_retention, n_playoffs)],
+    stage2[, .(franchID, avg_achievement, avg_war_ret_pct, n_playoffs)],
     avg_payroll
   )
 )
@@ -497,43 +523,55 @@ pct_rank <- function(x, higher_better = TRUE) {
   round(p, 1)
 }
 syn[, `:=`(
-  pct_fa_cost     = pct_rank(fa_m_per_war,     higher_better = FALSE),
-  pct_dead        = pct_rank(dead_pct,          higher_better = FALSE),
-  pct_hg          = pct_rank(hg_war_pct,        higher_better = TRUE),
-  pct_retention   = pct_rank(avg_war_retention, higher_better = TRUE),
-  pct_achievement = pct_rank(avg_achievement,   higher_better = TRUE)
+  pct_fa_cost     = pct_rank(fa_m_per_war,   higher_better = FALSE),
+  pct_dead        = pct_rank(dead_pct,        higher_better = FALSE),
+  pct_hg          = pct_rank(hg_war_pct,      higher_better = TRUE),
+  pct_retention   = pct_rank(avg_war_ret_pct, higher_better = TRUE),
+  pct_achievement = pct_rank(avg_achievement, higher_better = TRUE)
 )]
 syn[, overall := rowMeans(.SD, na.rm = TRUE),
     .SDcols = c("pct_fa_cost","pct_dead","pct_hg","pct_retention","pct_achievement")]
+syn[, overall_pct := pct_rank(overall, TRUE)]
 setorder(syn, -overall)
-syn[, short := factor(short, levels = rev(short))]
+syn[, short_f := factor(short, levels = rev(short))]
 
 metrics_labels <- c(
   pct_fa_cost     = "FA Efficiency\n($/WAR)",
   pct_dead        = "Low Dead\nMoney",
   pct_hg          = "Homegrown\nWAR %",
   pct_retention   = "Oct WAR\nRetention",
-  pct_achievement = "Playoff\nAchievement"
+  pct_achievement = "Playoff\nAchievement",
+  overall_pct     = "OVERALL\n(mean rank)"
 )
 syn_long <- melt(
-  syn[, c("franchID","short", names(metrics_labels)), with = FALSE],
-  id.vars      = c("franchID","short"),
+  syn[, c("franchID","short_f", names(metrics_labels)), with = FALSE],
+  id.vars       = c("franchID","short_f"),
   variable.name = "metric",
-  value.name   = "pct"
+  value.name    = "pct"
 )
-syn_long[, metric_label := factor(metrics_labels[metric], levels = metrics_labels)]
+syn_long[, metric_label := factor(metrics_labels[as.character(metric)],
+                                   levels = metrics_labels)]
+syn_long[, is_overall := metric == "overall_pct"]
 
-ggplot(syn_long, aes(metric_label, short, fill = pct)) +
-  geom_tile(colour = "white", linewidth = 0.6) +
+ggplot(syn_long, aes(metric_label, short_f, fill = pct)) +
+  geom_tile(aes(colour = is_overall, linewidth = is_overall)) +
   geom_text(aes(label = round(pct)), size = 2.8,
             colour = "white", fontface = "bold") +
   scale_fill_gradient2(low = "#D6604D", mid = "gold", high = "#2166AC",
                        midpoint = 50, name = "Percentile",
                        limits = c(0, 100)) +
+  scale_colour_manual(values = c(`FALSE` = "white", `TRUE` = "#333333"),
+                      guide = "none") +
+  scale_linewidth_manual(values = c(`FALSE` = 0.5, `TRUE` = 1.5),
+                         guide = "none") +
   scale_x_discrete(position = "top") +
   labs(
     title    = "Franchise Management Efficiency Scorecard",
-    subtitle = "Percentile rank (100 = best). Franchises with 5+ playoff appearances, 1995-2021.",
+    subtitle = paste0(
+      "Sorted by OVERALL = simple mean of all 5 dimension percentile ranks.\n",
+      "100 = best franchise on that dimension; 0 = worst. ",
+      "Franchises with \u22655 playoff appearances, 1995-2021."
+    ),
     caption  = "Sources: Lahman, FanGraphs, Spotrac, USA Today"
   ) +
   theme_minimal(base_size = 12) +
@@ -559,8 +597,10 @@ DBI::dbDisconnect(con, shutdown = TRUE)
 
 ## Key Takeaways
 
-1. **High payroll does not buy rings.** The correlation between average seasonal
-   payroll and playoff achievement score is near zero across 1995--2021.
+1. **High payroll does not buy rings.** The Pearson correlation between average
+   seasonal payroll and playoff achievement score is r ≈ 0.00 (R² < 0.001)
+   across 1995--2021. In fact, the slope is slightly *negative* — not because
+   spending hurts, but because the signal is genuinely absent.
 
 2. **Dead money disproportionately hurts small-market teams.** A single bad
    long-term contract can consume 25--30% of a small-market team's entire
