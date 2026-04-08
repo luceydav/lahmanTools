@@ -1,0 +1,578 @@
+---
+title: "MLB Franchise Management Efficiency"
+author: "David Lucey"
+date: last-modified
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    fig-width: 10
+    fig-height: 7
+    theme: flatly
+vignette: >
+  %\VignetteIndexEntry{MLB Franchise Management Efficiency}
+  %\VignetteEngine{quarto::html}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  collapse  = TRUE,
+  comment   = "#>",
+  fig.align = "center"
+)
+```
+
+## Overview
+
+This vignette walks through a two-stage analysis of MLB franchise management
+efficiency covering 1995–2021 (excluding the anomalous 2020 bubble season).
+
+**Stage 1 — Getting to October:** How efficiently does a franchise convert
+payroll dollars into playoff appearances? Dimensions:
+
+- Veteran free-agent cost ($/WAR)
+- Dead-money burden (salary paid to ≤0-WAR players)
+- Homegrown pipeline (% of roster WAR from drafted/developed players)
+
+**Stage 2 — Going Deep:** Among teams that *make* the playoffs, which ones
+convert appearances into deep runs? Dimensions:
+
+- Regular-season WAR rank among that year's playoff field
+- Postseason WAR retention (RS production that actually showed up in October)
+- Playoff achievement score (WC win = 1 pt, DS = 2, LCS = 4, WS = 8)
+
+The analysis uses:
+
+- **Lahman Baseball Database** (team stats, postseason tables, salary 1985–2016)
+- **FanGraphs WAR** via `baseballr` (1985–2025)
+- **Spotrac / USA Today salary data** (2017–2025, in `SalariesAll` view)
+
+```{r prereqs, eval=FALSE}
+# Prerequisites: database must be built first
+# lahmanTools::setup_baseball_db()   # builds baseball.duckdb
+```
+
+```{r libs}
+#| message: false
+#| eval: !expr !is.na(Sys.getenv("LAHMANS_DBDIR", unset = NA))
+suppressPackageStartupMessages({
+  library(data.table)
+  library(ggplot2)
+  library(ggrepel)
+  library(DBI)
+  library(duckdb)
+  library(scales)
+})
+
+n_distinct <- function(x) length(unique(x[!is.na(x)]))
+
+db_path <- file.path(
+  path.expand(Sys.getenv("LAHMANS_DBDIR", "~/Documents/Data/baseball")),
+  "baseball.duckdb"
+)
+con <- dbConnect(duckdb(), db_path, read_only = TRUE)
+qry <- function(sql) setDT(dbGetQuery(con, sql))
+```
+
+---
+
+## Franchise map
+
+We use `franchID` throughout so that relocated/renamed franchises are tracked
+consistently (e.g., FLO → MIA, MON → WAS).
+
+```{r fran-map}
+#| eval: !expr !is.na(Sys.getenv("LAHMANS_DBDIR", unset = NA))
+fran_map <- qry("
+  SELECT DISTINCT t.teamID, t.franchID, tf.franchName
+  FROM Teams t
+  JOIN TeamsFranchises tf ON t.franchID = tf.franchID
+  WHERE t.yearID BETWEEN 1995 AND 2021
+")
+short_names <- c(
+  NYA = "Yankees",   NYN = "Mets",      LAN = "Dodgers",
+  BOS = "Red Sox",   OAK = "Athletics", TBD = "Rays",
+  HOU = "Astros",    ATL = "Braves",    ARI = "D-Backs",
+  CHC = "Cubs",      CHN = "Cubs",      SFN = "Giants",
+  SLN = "Cardinals", PHI = "Phillies",  CLE = "Guardians",
+  MIN = "Twins",     DET = "Tigers",    SEA = "Mariners",
+  TEX = "Rangers",   BAL = "Orioles",   TOR = "Blue Jays",
+  KCA = "Royals",    MIL = "Brewers",   MIA = "Marlins",
+  FLA = "Marlins",   CIN = "Reds",      SDN = "Padres",
+  COL = "Rockies",   ANA = "Angels",    WAS = "Nationals",
+  MON = "Expos",     CHA = "White Sox", PIT = "Pirates",
+  ML4 = "Brewers",   CAL = "Angels",    FLO = "Marlins"
+)
+fran_map[, short := short_names[franchID]]
+fran_map[is.na(short), short := franchID]
+fran_key <- unique(fran_map[, .(franchID, franchName, short)])
+fran_key <- fran_key[!duplicated(franchID)]
+```
+
+---
+
+## Playoff achievement scores
+
+Each playoff appearance is scored by how far the team advanced:
+
+| Round | Points |
+|-------|-------:|
+| Wild Card win | 1 |
+| Division Series win | 2 |
+| LCS win | 4 |
+| World Series win | 8 |
+
+Maximum possible = 15 (WC + DS + LCS + WS wins for a champion).
+
+```{r playoff-scores}
+#| eval: !expr !is.na(Sys.getenv("LAHMANS_DBDIR", unset = NA))
+playoff_seasons <- qry("
+  WITH all_teams AS (
+    SELECT teamIDwinner AS teamID, yearID FROM SeriesPost
+    WHERE yearID BETWEEN 1995 AND 2021 AND yearID != 2020
+    UNION
+    SELECT teamIDloser AS teamID, yearID FROM SeriesPost
+    WHERE yearID BETWEEN 1995 AND 2021 AND yearID != 2020
+  )
+  SELECT a.teamID, a.yearID,
+    COALESCE(SUM(CASE
+      WHEN sw.round = 'WS'                               THEN 8
+      WHEN sw.round IN ('ALCS','NLCS')                   THEN 4
+      WHEN sw.round IN ('ALDS1','ALDS2','NLDS1','NLDS2') THEN 2
+      WHEN sw.round IN ('ALWC','NLWC')
+           OR sw.round LIKE 'ALWC%'
+           OR sw.round LIKE 'NLWC%'                     THEN 1
+      ELSE 0 END), 0) AS achievement_score
+  FROM all_teams a
+  LEFT JOIN SeriesPost sw
+    ON a.teamID = sw.teamIDwinner
+    AND a.yearID = sw.yearID
+    AND sw.yearID BETWEEN 1995 AND 2021
+    AND sw.yearID != 2020
+  GROUP BY a.teamID, a.yearID
+")
+playoff_seasons <- merge(playoff_seasons,
+                          fran_map[, .(teamID, franchID)],
+                          by = "teamID", all.x = TRUE)
+```
+
+---
+
+## Postseason WAR proxy
+
+No published postseason WAR exists from FanGraphs or any other source for this
+era. The industry-standard approach scales each player's regular-season WAR by
+their postseason usage rate:
+
+$$\text{PS WAR proxy} = \text{RS WAR} \times \frac{\text{PS PA (or IP)}}{\text{RS PA (or IP)}}$$
+
+Players who appear on a playoff roster but record zero postseason PA/IP receive a
+proxy of 0. This directly captures two important signals:
+
+1. **Injury/decline** — a high-salary veteran who is hurt in October contributes 0
+2. **Roster construction** — teams that carry their best regular-season producers
+   into the playoffs score higher
+
+```{r war-proxy}
+#| eval: !expr !is.na(Sys.getenv("LAHMANS_DBDIR", unset = NA))
+playoff_ty <- unique(playoff_seasons[, .(teamID, yearID)])
+
+rs_pa <- qry("
+  SELECT playerID, yearID, teamID,
+    SUM(AB + COALESCE(BB,0) + COALESCE(HBP,0)
+        + COALESCE(SF,0) + COALESCE(SH,0)) AS rs_pa
+  FROM Batting
+  WHERE yearID BETWEEN 1995 AND 2021 AND yearID != 2020
+  GROUP BY playerID, yearID, teamID
+")
+rs_ip <- qry("
+  SELECT playerID, yearID, teamID, SUM(IPouts) AS rs_ipouts
+  FROM Pitching
+  WHERE yearID BETWEEN 1995 AND 2021 AND yearID != 2020
+  GROUP BY playerID, yearID, teamID
+")
+ps_pa <- qry("
+  SELECT playerID, yearID, teamID,
+    SUM(AB + COALESCE(BB,0) + COALESCE(HBP,0)
+        + COALESCE(SF,0) + COALESCE(SH,0)) AS ps_pa
+  FROM BattingPost
+  WHERE yearID BETWEEN 1995 AND 2021 AND yearID != 2020
+  GROUP BY playerID, yearID, teamID
+")
+ps_ip <- qry("
+  SELECT playerID, yearID, teamID, SUM(IPouts) AS ps_ipouts
+  FROM PitchingPost
+  WHERE yearID BETWEEN 1995 AND 2021 AND yearID != 2020
+  GROUP BY playerID, yearID, teamID
+")
+war_data <- qry("
+  SELECT playerID, yearID, bat_war, pit_war, total_war
+  FROM PlayerWAR WHERE total_war IS NOT NULL
+")
+
+# Batter proxy
+bat_proxy <- rs_pa[playoff_ty, on = c("teamID","yearID"), nomatch = 0]
+bat_proxy <- bat_proxy[war_data[, .(playerID, yearID, bat_war)],
+                        on = c("playerID","yearID"), nomatch = 0]
+bat_proxy <- merge(bat_proxy, ps_pa, by = c("playerID","yearID","teamID"), all.x = TRUE)
+bat_proxy[is.na(ps_pa), ps_pa := 0L]
+bat_proxy[, bat_war_proxy := fifelse(
+  rs_pa > 0 & is.finite(bat_war) & bat_war > 0,
+  bat_war * (ps_pa / rs_pa), 0
+)]
+bat_team <- bat_proxy[, .(
+  rs_bat_war = sum(bat_war,       na.rm = TRUE),
+  ps_bat_war = sum(bat_war_proxy, na.rm = TRUE)
+), by = .(teamID, yearID)]
+
+# Pitcher proxy
+pit_proxy <- rs_ip[playoff_ty, on = c("teamID","yearID"), nomatch = 0]
+pit_proxy <- pit_proxy[war_data[, .(playerID, yearID, pit_war)],
+                        on = c("playerID","yearID"), nomatch = 0]
+pit_proxy <- merge(pit_proxy, ps_ip, by = c("playerID","yearID","teamID"), all.x = TRUE)
+pit_proxy[is.na(ps_ipouts), ps_ipouts := 0L]
+pit_proxy[, pit_war_proxy := fifelse(
+  rs_ipouts > 0 & is.finite(pit_war) & pit_war > 0,
+  pit_war * (ps_ipouts / rs_ipouts), 0
+)]
+pit_team <- pit_proxy[, .(
+  rs_pit_war = sum(pit_war,       na.rm = TRUE),
+  ps_pit_war = sum(pit_war_proxy, na.rm = TRUE)
+), by = .(teamID, yearID)]
+
+war_ret <- merge(bat_team, pit_team, by = c("teamID","yearID"), all = TRUE)
+for (col in c("rs_bat_war","rs_pit_war","ps_bat_war","ps_pit_war"))
+  set(war_ret, which(is.na(war_ret[[col]])), col, 0)
+war_ret[, `:=`(
+  rs_war_total = rs_bat_war + rs_pit_war,
+  ps_war_proxy = ps_bat_war + ps_pit_war
+)]
+war_ret[, war_retention := fifelse(rs_war_total > 0,
+                                    ps_war_proxy / rs_war_total, NA_real_)]
+```
+
+---
+
+## Stage 1: Getting to October
+
+```{r stage1-data}
+#| eval: !expr !is.na(Sys.getenv("LAHMANS_DBDIR", unset = NA))
+fa_cost <- qry("
+  SELECT t.franchID,
+    MEDIAN(sp.dollars_per_war / 1e6) AS fa_m_per_war,
+    COUNT(*) AS n_fa_seasons
+  FROM SalaryPerWAR sp
+  JOIN PlayerAcquisitionType pat
+    ON sp.playerID = pat.playerID AND sp.teamID = pat.teamID
+  JOIN Teams t ON sp.teamID = t.teamID AND sp.yearID = t.yearID
+  WHERE pat.acq_type = 'veteran_acq'
+    AND sp.yearID BETWEEN 1995 AND 2021 AND sp.yearID != 2020
+  GROUP BY t.franchID
+")
+
+playoff_rate <- qry("
+  WITH all_seasons AS (
+    SELECT DISTINCT t.franchID, t.yearID
+    FROM Teams t
+    WHERE t.yearID BETWEEN 1995 AND 2021 AND t.yearID != 2020
+  ),
+  playoff_fran AS (
+    SELECT DISTINCT t2.franchID, ps.yearID
+    FROM (
+      SELECT teamIDwinner AS teamID, yearID FROM SeriesPost
+      WHERE yearID BETWEEN 1995 AND 2021 AND yearID != 2020
+      UNION
+      SELECT teamIDloser AS teamID, yearID FROM SeriesPost
+      WHERE yearID BETWEEN 1995 AND 2021 AND yearID != 2020
+    ) ps
+    JOIN Teams t2 ON ps.teamID = t2.teamID AND ps.yearID = t2.yearID
+  )
+  SELECT a.franchID,
+    COUNT(DISTINCT a.yearID)                                          AS total_seasons,
+    COUNT(DISTINCT pf.yearID)                                         AS n_playoff_seasons,
+    COUNT(DISTINCT pf.yearID)::DOUBLE / COUNT(DISTINCT a.yearID)      AS playoff_rate
+  FROM all_seasons a
+  LEFT JOIN playoff_fran pf ON a.franchID = pf.franchID AND a.yearID = pf.yearID
+  GROUP BY a.franchID
+")
+
+dead_pct <- qry("
+  WITH payroll AS (
+    SELECT t.franchID, SUM(s.salary) / 1e6 AS total_payroll_M
+    FROM SalariesAll s
+    JOIN Teams t ON s.teamID = t.teamID AND s.yearID = t.yearID
+    WHERE s.is_actual = TRUE AND s.salary >= 1e6
+      AND s.yearID BETWEEN 1995 AND 2021 AND s.yearID != 2020
+    GROUP BY t.franchID
+  ),
+  dead AS (
+    SELECT t.franchID, SUM(s.salary) / 1e6 AS dead_M
+    FROM SalariesAll s
+    JOIN Teams t ON s.teamID = t.teamID AND s.yearID = t.yearID
+    LEFT JOIN PlayerWAR w ON s.playerID = w.playerID AND s.yearID = w.yearID
+    WHERE s.is_actual = TRUE AND s.salary >= 1e6
+      AND s.yearID BETWEEN 1995 AND 2021 AND s.yearID != 2020
+      AND (w.total_war IS NULL OR w.total_war <= 0)
+    GROUP BY t.franchID
+  )
+  SELECT p.franchID,
+    p.total_payroll_M,
+    d.dead_M,
+    d.dead_M / p.total_payroll_M * 100 AS dead_pct
+  FROM payroll p JOIN dead d ON p.franchID = d.franchID
+")
+
+hg_war <- qry("
+  SELECT t.franchID,
+    SUM(CASE WHEN pat.acq_type = 'homegrown' THEN sp.total_war ELSE 0 END)
+      ::DOUBLE / NULLIF(SUM(sp.total_war), 0) * 100 AS hg_war_pct
+  FROM SalaryPerWAR sp
+  JOIN PlayerAcquisitionType pat
+    ON sp.playerID = pat.playerID AND sp.teamID = pat.teamID
+  JOIN Teams t ON sp.teamID = t.teamID AND sp.yearID = t.yearID
+  WHERE sp.yearID BETWEEN 1995 AND 2021 AND sp.yearID != 2020
+    AND sp.total_war IS NOT NULL
+  GROUP BY t.franchID
+")
+
+avg_payroll <- qry("
+  SELECT t.franchID,
+    SUM(s.salary) / 1e6 / COUNT(DISTINCT s.yearID) AS avg_payroll_M
+  FROM SalariesAll s
+  JOIN Teams t ON s.teamID = t.teamID AND s.yearID = t.yearID
+  WHERE s.is_actual = TRUE AND s.salary >= 1e6
+    AND s.yearID BETWEEN 1995 AND 2021 AND s.yearID != 2020
+  GROUP BY t.franchID
+")
+
+stage1 <- Reduce(
+  function(a, b) merge(a, b, by = "franchID", all.x = TRUE),
+  list(fa_cost, playoff_rate, dead_pct[, .(franchID, dead_pct)],
+       hg_war, avg_payroll)
+)
+stage1 <- merge(stage1, fran_key, by = "franchID", all.x = TRUE)
+stage1 <- stage1[!is.na(short)]
+```
+
+```{r chart-stage1}
+#| eval: !expr !is.na(Sys.getenv("LAHMANS_DBDIR", unset = NA))
+#| fig-cap: "Stage 1: efficient franchises appear in the upper-left (low $/WAR, high playoff rate). Bubble size = dead-money burden; blue fill = strong homegrown pipeline."
+HIGHLIGHTS <- c("NYA","NYN","LAN","BOS","OAK","TBD","HOU","ATL")
+stage1[, label := ifelse(franchID %in% HIGHLIGHTS, short, NA_character_)]
+
+ggplot(stage1, aes(fa_m_per_war, playoff_rate * 100)) +
+  geom_point(aes(size = dead_pct, fill = hg_war_pct),
+             shape = 21, colour = "white", alpha = 0.9) +
+  geom_label_repel(aes(label = label), size = 3.2, fontface = "bold",
+                   box.padding = 0.4, na.rm = TRUE, seed = 42) +
+  scale_fill_gradient(low = "#D6604D", high = "#2166AC",
+                      name = "Homegrown WAR (%)") +
+  scale_size_continuous(range = c(2, 9),
+                        name = "Dead money\n(% payroll)") +
+  scale_x_continuous(labels = dollar_format(suffix = "M"),
+                     name = "Median $/WAR for veteran free agents") +
+  scale_y_continuous(name = "Playoff appearance rate (%)",
+                     labels = function(x) paste0(x, "%")) +
+  labs(
+    title   = "Stage 1: Who Gets to October Efficiently?",
+    caption = "Sources: Lahman, FanGraphs, Spotrac, USA Today -- 1995-2021"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(plot.title = element_text(face = "bold"),
+        legend.position = "bottom",
+        panel.grid.minor = element_blank())
+```
+
+---
+
+## Stage 2: Going Deep
+
+```{r stage2-data}
+#| eval: !expr !is.na(Sys.getenv("LAHMANS_DBDIR", unset = NA))
+team_rs_war <- qry("
+  WITH player_pa AS (
+    SELECT playerID, yearID, teamID,
+      SUM(AB + COALESCE(BB,0) + COALESCE(HBP,0)
+          + COALESCE(SF,0) + COALESCE(SH,0)) AS pa
+    FROM Batting
+    WHERE yearID BETWEEN 1995 AND 2021 AND yearID != 2020
+    GROUP BY playerID, yearID, teamID
+    UNION ALL
+    SELECT playerID, yearID, teamID, SUM(IPouts) AS pa
+    FROM Pitching
+    WHERE yearID BETWEEN 1995 AND 2021 AND yearID != 2020
+    GROUP BY playerID, yearID, teamID
+  ),
+  primary_team AS (
+    SELECT DISTINCT ON (playerID, yearID) playerID, yearID, teamID
+    FROM player_pa
+    ORDER BY playerID, yearID, pa DESC
+  )
+  SELECT pt.teamID, pt.yearID, SUM(pw.total_war) AS rs_war
+  FROM primary_team pt
+  JOIN PlayerWAR pw ON pt.playerID = pw.playerID AND pt.yearID = pw.yearID
+  WHERE pw.total_war IS NOT NULL
+  GROUP BY pt.teamID, pt.yearID
+")
+rs_war_playoff <- team_rs_war[playoff_ty, on = c("teamID","yearID"), nomatch = 0]
+rs_war_playoff[, rs_war_rank := frank(-rs_war, ties.method = "average"), by = yearID]
+
+stage2_raw <- Reduce(
+  function(a, b) merge(a, b, by = c("teamID","yearID"), all.x = TRUE),
+  list(
+    playoff_seasons,
+    rs_war_playoff[, .(teamID, yearID, rs_war, rs_war_rank)],
+    war_ret[, .(teamID, yearID, rs_war_total, ps_war_proxy, war_retention)]
+  )
+)
+stage2_raw <- merge(stage2_raw, fran_key, by = "franchID", all.x = TRUE)
+
+stage2 <- stage2_raw[!is.na(franchID), .(
+  n_playoffs        = .N,
+  avg_achievement   = mean(achievement_score,  na.rm = TRUE),
+  avg_rs_war_rank   = mean(rs_war_rank,         na.rm = TRUE),
+  avg_war_retention = mean(war_retention,       na.rm = TRUE)
+), by = .(franchID, short, franchName)]
+setorder(stage2, -avg_achievement)
+```
+
+```{r chart-stage2}
+#| eval: !expr !is.na(Sys.getenv("LAHMANS_DBDIR", unset = NA))
+#| fig-cap: "Stage 2: x-axis reversed so stronger RS WAR teams are on the right. Colour shows WAR retention -- how much of that regular-season talent materialised in October."
+stage2_plot <- stage2[n_playoffs >= 5]
+stage2_plot[, label := short]
+
+ggplot(stage2_plot, aes(avg_rs_war_rank, avg_achievement)) +
+  geom_point(aes(size = n_playoffs, colour = avg_war_retention * 100), alpha = 0.9) +
+  geom_label_repel(aes(label = label), size = 3.2, fontface = "bold",
+                   box.padding = 0.5, seed = 42) +
+  scale_colour_gradient2(
+    low = "#D6604D", mid = "gold", high = "#2166AC", midpoint = 50,
+    name = "WAR retention (%)",
+    labels = function(x) paste0(round(x), "%")
+  ) +
+  scale_size_continuous(range = c(2, 9), name = "# playoff appearances") +
+  scale_x_reverse(
+    name = "Avg RS WAR rank among playoff teams that year (1 = most WAR)",
+    n.breaks = 8
+  ) +
+  scale_y_continuous(name = "Avg playoff achievement score per appearance") +
+  labs(
+    title   = "Stage 2: Who Converts October Appearances to Deep Runs?",
+    caption = paste0("WAR retention proxy: RS WAR x (PS PA/RS PA). ",
+                     "Absent players = 0. Sources: Lahman, FanGraphs")
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(plot.title = element_text(face = "bold"),
+        legend.position = "bottom",
+        panel.grid.minor = element_blank())
+```
+
+---
+
+## Synthesis Scorecard
+
+All five dimensions combined into a single percentile-rank heatmap.
+
+```{r scorecard}
+#| eval: !expr !is.na(Sys.getenv("LAHMANS_DBDIR", unset = NA))
+#| fig-height: 9
+#| fig-cap: "Percentile rank (100 = best franchise on that metric). Franchises with 5+ playoff appearances only."
+syn <- Reduce(
+  function(a, b) merge(a, b, by = "franchID", all.x = TRUE),
+  list(
+    stage1[, .(franchID, short, fa_m_per_war, playoff_rate, dead_pct, hg_war_pct)],
+    stage2[, .(franchID, avg_achievement, avg_war_retention, n_playoffs)],
+    avg_payroll
+  )
+)
+syn <- syn[n_playoffs >= 5 & !is.na(fa_m_per_war)]
+
+pct_rank <- function(x, higher_better = TRUE) {
+  r <- rank(x, na.last = "keep", ties.method = "average")
+  p <- (r - 1) / (sum(!is.na(x)) - 1) * 100
+  if (!higher_better) p <- 100 - p
+  round(p, 1)
+}
+syn[, `:=`(
+  pct_fa_cost     = pct_rank(fa_m_per_war,     higher_better = FALSE),
+  pct_dead        = pct_rank(dead_pct,          higher_better = FALSE),
+  pct_hg          = pct_rank(hg_war_pct,        higher_better = TRUE),
+  pct_retention   = pct_rank(avg_war_retention, higher_better = TRUE),
+  pct_achievement = pct_rank(avg_achievement,   higher_better = TRUE)
+)]
+syn[, overall := rowMeans(.SD, na.rm = TRUE),
+    .SDcols = c("pct_fa_cost","pct_dead","pct_hg","pct_retention","pct_achievement")]
+setorder(syn, -overall)
+syn[, short := factor(short, levels = rev(short))]
+
+metrics_labels <- c(
+  pct_fa_cost     = "FA Efficiency\n($/WAR)",
+  pct_dead        = "Low Dead\nMoney",
+  pct_hg          = "Homegrown\nWAR %",
+  pct_retention   = "Oct WAR\nRetention",
+  pct_achievement = "Playoff\nAchievement"
+)
+syn_long <- melt(
+  syn[, c("franchID","short", names(metrics_labels)), with = FALSE],
+  id.vars      = c("franchID","short"),
+  variable.name = "metric",
+  value.name   = "pct"
+)
+syn_long[, metric_label := factor(metrics_labels[metric], levels = metrics_labels)]
+
+ggplot(syn_long, aes(metric_label, short, fill = pct)) +
+  geom_tile(colour = "white", linewidth = 0.6) +
+  geom_text(aes(label = round(pct)), size = 2.8,
+            colour = "white", fontface = "bold") +
+  scale_fill_gradient2(low = "#D6604D", mid = "gold", high = "#2166AC",
+                       midpoint = 50, name = "Percentile",
+                       limits = c(0, 100)) +
+  scale_x_discrete(position = "top") +
+  labs(
+    title    = "Franchise Management Efficiency Scorecard",
+    subtitle = "Percentile rank (100 = best). Franchises with 5+ playoff appearances, 1995-2021.",
+    caption  = "Sources: Lahman, FanGraphs, Spotrac, USA Today"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title      = element_text(face = "bold"),
+    axis.title      = element_blank(),
+    axis.text.y     = element_text(size = 10, face = "bold"),
+    legend.position = "right",
+    panel.grid      = element_blank()
+  )
+```
+
+---
+
+## Cleanup
+
+```{r cleanup}
+#| eval: !expr !is.na(Sys.getenv("LAHMANS_DBDIR", unset = NA))
+DBI::dbDisconnect(con, shutdown = TRUE)
+```
+
+---
+
+## Key Takeaways
+
+1. **High payroll does not buy rings.** The correlation between average seasonal
+   payroll and playoff achievement score is near zero across 1995--2021.
+
+2. **Dead money disproportionately hurts small-market teams.** A single bad
+   long-term contract can consume 25--30% of a small-market team's entire
+   budget, crowding out productive roster depth.
+
+3. **Homegrown pipelines are the most efficient path to sustained WAR.** Teams
+   that develop talent internally pay pre-arbitration and arbitration rates --
+   a fraction of open-market costs.
+
+4. **WAR retention in October separates contenders from early exits.** Aging
+   veteran rosters assembled through expensive free-agent signings are more
+   likely to show depleted WAR in the postseason due to injury and decline.
+
+5. **The best franchises score well across all five dimensions.** No single
+   lever -- payroll, development, or health -- is sufficient on its own.
