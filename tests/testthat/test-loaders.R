@@ -248,3 +248,148 @@ test_that("load_statcast rejects years before 2015", {
   on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
   expect_error(load_statcast(con, years = 2014L), "2015")
 })
+
+# ── load_retrosheet_post ──────────────────────────────────────────────────────
+
+# Build a minimal in-memory DB with the five tables load_retrosheet_post needs.
+stub_retrosheet_tables <- function(con) {
+  DBI::dbExecute(con, "
+    CREATE TABLE People (
+      playerID VARCHAR, retroID VARCHAR, bbrefID VARCHAR,
+      nameFirst VARCHAR, nameLast VARCHAR
+    )")
+  DBI::dbExecute(con, "
+    CREATE TABLE Teams (
+      teamID VARCHAR, yearID INTEGER, lgID VARCHAR, franchID VARCHAR
+    )")
+  DBI::dbExecute(con, "
+    CREATE TABLE BattingPost (
+      playerID VARCHAR, yearID INTEGER, round VARCHAR,
+      teamID VARCHAR, lgID VARCHAR,
+      G INTEGER, AB INTEGER, R INTEGER, H INTEGER, X2B INTEGER, X3B INTEGER,
+      HR INTEGER, RBI INTEGER, SB INTEGER, CS INTEGER,
+      BB INTEGER, SO INTEGER, IBB INTEGER, HBP INTEGER,
+      SH INTEGER, SF INTEGER, GIDP INTEGER
+    )")
+  DBI::dbExecute(con, "
+    CREATE TABLE PitchingPost (
+      playerID VARCHAR, yearID INTEGER, round VARCHAR,
+      teamID VARCHAR, lgID VARCHAR,
+      W INTEGER, L INTEGER, G INTEGER, GS INTEGER,
+      CG INTEGER, SHO INTEGER, SV INTEGER, IPouts INTEGER,
+      H INTEGER, ER INTEGER, HR INTEGER, BB INTEGER, SO INTEGER,
+      BAOpp DOUBLE, ERA DOUBLE, IBB INTEGER, WP INTEGER, HBP INTEGER,
+      BK INTEGER, BFP INTEGER, GF INTEGER, R INTEGER, SH INTEGER,
+      SF INTEGER, GIDP INTEGER
+    )")
+  DBI::dbExecute(con, "
+    CREATE TABLE SeriesPost (
+      yearID INTEGER, round VARCHAR,
+      teamIDwinner VARCHAR, lgIDwinner VARCHAR,
+      teamIDloser  VARCHAR, lgIDloser  VARCHAR,
+      wins INTEGER, losses INTEGER, ties INTEGER
+    )")
+  # Two teams for 2022 WS (HOU vs PHI)
+  DBI::dbExecute(con, "INSERT INTO Teams VALUES ('HOU', 2021, 'AL', 'HOU')")
+  DBI::dbExecute(con, "INSERT INTO Teams VALUES ('PHI', 2021, 'NL', 'PHI')")
+}
+
+# Create a minimal Retrosheet-format zip from vectors of game records.
+make_retro_zip <- function(zip_path, bat_rows, pit_rows) {
+  extract_dir <- dirname(zip_path)
+  bat_file <- file.path(extract_dir, "batting.csv")
+  pit_file <- file.path(extract_dir, "pitching.csv")
+
+  bat_header <- paste(
+    "gid,id,team,opp,b_lp,b_seq,stattype,b_pa,b_ab,b_r,b_h,b_d,b_t,b_hr,",
+    "b_rbi,b_sh,b_sf,b_hbp,b_w,b_iw,b_k,b_sb,b_cs,b_gdp,b_xi,b_roe,",
+    "dh,ph,pr,date,number,site,vishome,win,loss,tie,gametype,box,pbp",
+    sep = "")
+  writeLines(c(bat_header, bat_rows), bat_file)
+
+  pit_header <- paste(
+    "gid,id,team,opp,date,number,site,vishome,win,loss,tie,gametype,box,pbp,",
+    "wp,lp,save,p_gs,p_gf,p_cg,p_ipouts,p_h,p_er,p_hr,p_w,p_iw,p_k,",
+    "p_hbp,p_wp,p_bk,p_bfp,p_r,p_sh,p_sf",
+    sep = "")
+  writeLines(c(pit_header, pit_rows), pit_file)
+
+  zip::zip(zip_path, files = c("batting.csv", "pitching.csv"),
+           root = extract_dir, mode = "cherry-pick")
+  unlink(c(bat_file, pit_file))
+}
+
+test_that("load_retrosheet_post errors when required tables are missing", {
+  con <- DBI::dbConnect(duckdb::duckdb(), ":memory:")
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  expect_error(load_retrosheet_post(con), "Required tables missing")
+})
+
+test_that("load_retrosheet_post errors when zip_path does not exist", {
+  con <- DBI::dbConnect(duckdb::duckdb(), ":memory:")
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  stub_retrosheet_tables(con)
+  expect_error(
+    load_retrosheet_post(con, years = 2022L, zip_path = "/no/such/file.zip"),
+    "zip_path does not exist"
+  )
+})
+
+test_that("load_retrosheet_post skips when all years already loaded", {
+  con <- DBI::dbConnect(duckdb::duckdb(), ":memory:")
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  stub_retrosheet_tables(con)
+  # Seed BattingPost with 2022 already present
+  DBI::dbExecute(con,
+    "INSERT INTO BattingPost (playerID,yearID,round,teamID,lgID,G,AB,R,H,
+      X2B,X3B,HR,RBI,SB,CS,BB,SO,IBB,HBP,SH,SF,GIDP)
+     VALUES ('testpl01',2022,'WS','HOU','AL',1,4,1,2,0,0,1,2,0,0,0,1,0,0,0,0,0)")
+  expect_message(
+    load_retrosheet_post(con, years = 2022L, zip_path = "unused"),
+    "already contains"
+  )
+})
+
+test_that("load_retrosheet_post appends rows to BattingPost, PitchingPost, SeriesPost", {
+  skip_if_not_installed("zip")
+  con <- DBI::dbConnect(duckdb::duckdb(), ":memory:")
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  stub_retrosheet_tables(con)
+
+  # Seed People with retroIDs for HOU batter + pitcher
+  DBI::dbExecute(con,
+    "INSERT INTO People VALUES ('altuvjo01','altuvj001','altuvjo01','Jose','Altuve')")
+  DBI::dbExecute(con,
+    "INSERT INTO People VALUES ('verlaju01','verlaj001','verlaju01','Justin','Verlander')")
+  DBI::dbExecute(con,
+    "INSERT INTO People VALUES ('harpbr01', 'harpebr01','harpbr01', 'Bryce','Harper')")
+
+  td <- tempdir()
+  zip_path <- file.path(td, "test_retro.zip")
+
+  # One WS game: HOU home, PHI visitor, HOU wins
+  bat_rows <- c(
+    "WS2022HOU10200220,altuvj001,HOU,PHI,1,1,batter,4,4,1,2,0,0,1,2,0,0,0,0,0,1,0,0,0,0,,0,0,0,20221101,1,MINU,h,1,0,0,worldseries,,",
+    "WS2022HOU10200220,harpebr01,PHI,HOU,2,1,batter,4,3,0,1,0,0,0,0,0,0,0,1,0,1,0,0,0,0,,0,0,0,20221101,1,MINU,v,1,0,0,worldseries,,"
+  )
+  pit_rows <- c(
+    "WS2022HOU10200220,verlaj001,HOU,PHI,20221101,1,MINU,h,1,0,0,worldseries,,,1,0,0,1,0,0,24,5,1,0,1,0,5,0,0,0,28,1,0,0"
+  )
+
+  make_retro_zip(zip_path, bat_rows, pit_rows)
+
+  load_retrosheet_post(con, years = 2022L, zip_path = zip_path)
+
+  bp <- DBI::dbGetQuery(con, "SELECT * FROM BattingPost WHERE yearID = 2022")
+  pp <- DBI::dbGetQuery(con, "SELECT * FROM PitchingPost WHERE yearID = 2022")
+  sp <- DBI::dbGetQuery(con, "SELECT * FROM SeriesPost WHERE yearID = 2022")
+
+  expect_gt(nrow(bp), 0L)
+  expect_gt(nrow(pp), 0L)
+  expect_gt(nrow(sp), 0L)
+  expect_true(all(bp$yearID == 2022L))
+  expect_true("WS" %in% bp$round)
+  expect_true("WS" %in% sp$round)
+  # HOU won the single game, so should be winner
+  expect_equal(sp$teamIDwinner, "HOU")
+})

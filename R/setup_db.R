@@ -44,6 +44,14 @@
 #'   Requires an internet connection and \pkg{baseballr}.  Default `FALSE`.
 #' @param war_years Integer vector of seasons to fetch for WAR data.
 #'   Defaults to `1985:2025` (full salary era).
+#' @param load_retrosheet If `TRUE`, download Retrosheet postseason CSVs and
+#'   extend `BattingPost`, `PitchingPost`, and `SeriesPost` through the latest
+#'   available year (currently 2025).  The Lahman tables stop at 2021; this
+#'   fills the gap.  Requires an internet connection.  Defaults to `TRUE` when
+#'   `load_war = TRUE`, `FALSE` otherwise.
+#' @param retrosheet_zip Optional path to a pre-downloaded Retrosheet
+#'   `basiccsvs.zip`.  When `NULL` (default), the file is downloaded from
+#'   \url{https://www.retrosheet.org/downloads/basiccsvs.zip}.
 #'
 #' @return Invisibly returns `dbdir`.
 #' @export
@@ -53,8 +61,9 @@
 #' # Download all tables from Chadwick Bureau and build database
 #' setup_baseball_db()
 #'
-#' # With full WAR coverage (requires baseballr and internet)
+#' # With full WAR and postseason coverage through 2025
 #' setup_baseball_db(load_war = TRUE, overwrite = TRUE)
+#' # load_war = TRUE implies load_retrosheet = TRUE automatically
 #' }
 setup_baseball_db <- function(dbdir         = NULL,
                                sal_file      = NULL,
@@ -62,7 +71,9 @@ setup_baseball_db <- function(dbdir         = NULL,
                                overwrite     = FALSE,
                                load_chadwick = FALSE,
                                load_war      = FALSE,
-                               war_years     = 1985:2025) {
+                               war_years     = 1985:2025,
+                               load_retrosheet = load_war,
+                               retrosheet_zip  = NULL) {
   if (is.null(dbdir)) {
     dbdir <- Sys.getenv(
       "LAHMANS_DBDIR",
@@ -374,6 +385,8 @@ setup_baseball_db <- function(dbdir         = NULL,
   if (load_war && !load_chadwick) load_chadwick <- TRUE
   if (load_chadwick) load_chadwick_ids(con, overwrite = overwrite)
   if (load_war)      load_fangraphs_war(con, years = war_years, overwrite = overwrite)
+  if (load_retrosheet) load_retrosheet_post(con, zip_path = retrosheet_zip,
+                                            overwrite = overwrite)
 
   n <- length(DBI::dbListTables(con))
   message(sprintf("\nDone. %d tables/views written to %s", n, dbdir))

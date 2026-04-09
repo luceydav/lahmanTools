@@ -58,15 +58,18 @@ We score each franchise across five management dimensions using percentile ranks
 
 ## Data Coverage
 
-- **Lahman Baseball Database** — team stats, postseason tables (`SeriesPost`,
-  `BattingPost`, `PitchingPost`), and salary data through 2021
+- **Lahman Baseball Database** — team stats, salary data through 2016, and
+  postseason tables (`SeriesPost`, `BattingPost`, `PitchingPost`) through 2021
+- **Retrosheet bulk CSVs** — postseason batting, pitching, and series results
+  extended to 2025 via `load_retrosheet_post()` (WC/DS/LCS/WS rounds)
 - **FanGraphs WAR** via `baseballr` (1985–2025)
 - **Spotrac / USA Today salary data** (2017–2025, combined in `SalariesAll` view)
 
-All playoff-dependent metrics (achievement scores, WAR retention proxy) are
-capped at 2021 because the Lahman postseason tables do not extend beyond that year.
-Salary and WAR data extend to 2025 but are shown here on the same 1995–2021
-window for consistency.
+Playoff achievement scores and series outcomes extend to **1995–2025** (excl. 2020).
+WAR retention proxy is capped at **2021** because regular-season `Batting` and
+`Pitching` tables (used to compute RS PA/IPouts) stop at 2021 in the Lahman release.
+Call `lahmanTools::load_retrosheet_post()` after `setup_baseball_db()` to add
+2022–2025 postseason records before running this analysis.
 
 ```{r prereqs, eval=FALSE}
 # Prerequisites: database must be built first
@@ -148,10 +151,10 @@ Maximum possible = 15 (WC + DS + LCS + WS wins for a champion).
 playoff_seasons <- qry("
   WITH all_teams AS (
     SELECT teamIDwinner AS teamID, yearID FROM SeriesPost
-    WHERE yearID BETWEEN 1995 AND 2021 AND yearID != 2020
+    WHERE yearID BETWEEN 1995 AND 2025 AND yearID != 2020
     UNION
     SELECT teamIDloser AS teamID, yearID FROM SeriesPost
-    WHERE yearID BETWEEN 1995 AND 2021 AND yearID != 2020
+    WHERE yearID BETWEEN 1995 AND 2025 AND yearID != 2020
   )
   SELECT a.teamID, a.yearID,
     COALESCE(SUM(CASE
@@ -166,7 +169,7 @@ playoff_seasons <- qry("
   LEFT JOIN SeriesPost sw
     ON a.teamID = sw.teamIDwinner
     AND a.yearID = sw.yearID
-    AND sw.yearID BETWEEN 1995 AND 2021
+    AND sw.yearID BETWEEN 1995 AND 2025
     AND sw.yearID != 2020
   GROUP BY a.teamID, a.yearID
 ")
@@ -391,7 +394,7 @@ ggplot(stage1, aes(fa_m_per_war, playoff_rate * 100)) +
                      labels = function(x) paste0(x, "%")) +
   labs(
     title   = "Stage 1: Who Gets to October Efficiently?",
-    caption = "Sources: Lahman, FanGraphs, Spotrac, USA Today -- 1995-2021"
+    caption = "Sources: Lahman, Retrosheet, FanGraphs, Spotrac, USA Today -- 1995-2025 (achievement); WAR retention 1995-2021"
   ) +
   theme_minimal(base_size = 13) +
   theme(plot.title = element_text(face = "bold"),
@@ -570,7 +573,7 @@ ggplot(syn_long, aes(metric_label, short_f, fill = pct)) +
     subtitle = paste0(
       "Sorted by OVERALL = simple mean of all 5 dimension percentile ranks.\n",
       "100 = best franchise on that dimension; 0 = worst. ",
-      "Franchises with \u22655 playoff appearances, 1995-2021."
+      "Franchises with \u22655 playoff appearances, 1995-2025 (excl. 2020)."
     ),
     caption  = "Sources: Lahman, FanGraphs, Spotrac, USA Today"
   ) +
@@ -599,7 +602,7 @@ DBI::dbDisconnect(con, shutdown = TRUE)
 
 1. **High payroll does not buy rings.** The Pearson correlation between average
    seasonal payroll and playoff achievement score is r ≈ 0.00 (R² < 0.001)
-   across 1995--2021. In fact, the slope is slightly *negative* — not because
+   across 1995--2025 (excl. 2020). In fact, the slope is slightly *negative* — not because
    spending hurts, but because the signal is genuinely absent.
 
 2. **Dead money disproportionately hurts small-market teams.** A single bad
