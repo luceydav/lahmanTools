@@ -14,3 +14,4 @@
 ^AGENTS\.md$
 ^CONTRIBUTING\.md$
 ^analysis$
+^.*\.pdf$

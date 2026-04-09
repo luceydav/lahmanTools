@@ -11,7 +11,9 @@ setup_baseball_db(
   overwrite = FALSE,
   load_chadwick = FALSE,
   load_war = FALSE,
-  war_years = 1985:2025
+  war_years = 1985:2025,
+  load_retrosheet = load_war,
+  retrosheet_zip = NULL
 )
 }
 \arguments{
@@ -44,6 +46,16 @@ Requires an internet connection and \pkg{baseballr}.  Default \code{FALSE}.}
 
 \item{war_years}{Integer vector of seasons to fetch for WAR data.
 Defaults to \code{1985:2025} (full salary era).}
+
+\item{load_retrosheet}{If \code{TRUE}, download Retrosheet postseason CSVs and
+extend \code{BattingPost}, \code{PitchingPost}, and \code{SeriesPost} through the latest
+available year (currently 2025).  The Lahman tables stop at 2021; this
+fills the gap.  Requires an internet connection.  Defaults to \code{TRUE} when
+\code{load_war = TRUE}, \code{FALSE} otherwise.}
+
+\item{retrosheet_zip}{Optional path to a pre-downloaded Retrosheet
+\code{basiccsvs.zip}.  When \code{NULL} (default), the file is downloaded from
+\url{https://www.retrosheet.org/downloads/basiccsvs.zip}.}
 }
 \value{
 Invisibly returns \code{dbdir}.
@@ -80,7 +92,8 @@ from FanGraphs for the full salary era (1985+).
 # Download all tables from Chadwick Bureau and build database
 setup_baseball_db()
 
-# With full WAR coverage (requires baseballr and internet)
+# With full WAR and postseason coverage through 2025
 setup_baseball_db(load_war = TRUE, overwrite = TRUE)
+# load_war = TRUE implies load_retrosheet = TRUE automatically
 }
 }
