@@ -96,7 +96,7 @@ scrape_salaries <- function(years      = 2017:2025,
 
   # -- Join to playerID ---------------------------------------------------------
   if (!is.null(con)) {
-    people <- data.table::as.data.table(DBI::dbGetQuery(con, "SELECT playerID, nameLast, nameFirst, nameGiven FROM People"))
+    people <- db_query(con, "SELECT playerID, nameLast, nameFirst, nameGiven FROM People")
   } else {
     stop("A DuckDB connection (con=) is required for player ID matching. ",
          "Run setup_baseball_db() and pass con = connect_baseball_db().")

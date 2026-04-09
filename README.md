@@ -301,9 +301,10 @@ the source license.
 |--------|---------|------------|
 | [Sean Lahman Baseball Database](http://www.seanlahman.com/) via [cbwinslow/baseballdatabank](https://github.com/cbwinslow/baseballdatabank) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) | Credit Sean Lahman and carry the same license in any derivative work. |
 | [Chadwick Baseball Bureau Register](https://github.com/chadwickbureau/register) | [ODC-BY 1.0](https://opendatacommons.org/licenses/by/1-0/) | Credit the Chadwick Baseball Bureau when publishing work that uses the player ID crosswalk. |
+| [Retrosheet](https://www.retrosheet.org) | Copyright Retrosheet | "The information used here was obtained free of charge from and is copyrighted by Retrosheet. Interested parties may contact Retrosheet at https://www.retrosheet.org" — must appear prominently in any work using this data. |
 | [FanGraphs WAR Leaderboards](https://www.fangraphs.com) | Copyright FanGraphs | Do not redistribute the fetched data. |
 | [Baseball Savant / Statcast](https://baseballsavant.mlb.com/) | Copyright MLB Advanced Media | Do not redistribute the fetched data. |
-| USA Today / Spotrac salary data | Proprietary — ToS applies | See [`data-raw/README.md`](data-raw/README.md). Do not redistribute. |
+| USA Today / Spotrac salary data | Proprietary -- ToS applies | See [`data-raw/README.md`](data-raw/README.md). Do not redistribute. |
 
 FanGraphs, Chadwick, and Statcast data are fetched via the
 [`baseballr`](https://billpetti.github.io/baseballr/) package

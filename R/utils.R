@@ -294,8 +294,8 @@ match_player_ids <- function(sal_dt, people_dt, roster_dt = NULL, con = NULL) {
                 "Pass con = connect_baseball_db() for best match rates.")
       } else {
         roster_dt <- tryCatch({
-          bat <- data.table::as.data.table(DBI::dbGetQuery(con, "SELECT playerID, yearID, teamID FROM Batting"))
-          pit <- data.table::as.data.table(DBI::dbGetQuery(con, "SELECT playerID, yearID, teamID FROM Pitching"))
+          bat <- db_query(con, "SELECT playerID, yearID, teamID FROM Batting")
+          pit <- db_query(con, "SELECT playerID, yearID, teamID FROM Pitching")
           unique(rbind(
             bat[, .(playerID, yearID, teamID)],
             pit[, .(playerID, yearID, teamID)]

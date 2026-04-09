@@ -1,3 +1,18 @@
+# lahmanTools 0.4.0
+
+## Attribution fix
+
+* **README** and **DESCRIPTION** now include Retrosheet as a credited data
+  source.  `load_retrosheet_post()` has always carried the required attribution
+  in its roxygen docs and `inst/RETROSHEET_NOTICE`; the top-level docs now
+  match.
+
+## Code quality
+
+* Three call sites that bypassed `db_query()` now use it consistently:
+  `scrape.R` (people lookup) and `utils.R` (Batting/Pitching roster tables in
+  `match_player_ids()` Pass 4).  No behaviour change -- purely DRY cleanup.
+
 # lahmanTools 0.3.0
 
 ## Breaking changes

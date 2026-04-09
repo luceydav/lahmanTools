@@ -1,0 +1,13 @@
+# CODEOWNERS — these files require owner review on every PR.
+# Protects against prompt injection via AI instruction files and
+# unauthorized expansion of the MCP attack surface.
+
+# AI agent instructions and MCP server config are sensitive:
+# a malicious change could redirect agent behaviour or expose new
+# execution vectors. Require explicit owner sign-off.
+.github/copilot-instructions.md @davidlucey
+.copilot/mcp-config.json        @davidlucey
+
+# DESCRIPTION and NAMESPACE control package identity and imports
+DESCRIPTION  @davidlucey
+NAMESPACE    @davidlucey

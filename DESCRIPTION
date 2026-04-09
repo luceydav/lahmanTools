@@ -1,13 +1,14 @@
 Package: lahmanTools
 Title: Baseball Analytics with Lahman and DuckDB
-Version: 0.3.0
+Version: 0.4.0
 Authors@R: person("David", "Lucey", role = c("aut", "cre"),
                   email = "david@example.com")
 Description: Loads all Sean Lahman baseball tables (1871-2025) into a persistent
     DuckDB database and exposes pre-built sabermetric SQL views (BattingStats,
     PitchingStats, SalaryPerWAR, etc.). Optionally extends salary coverage to
-    2017-2025 from USA Today and Spotrac, and supplements with FanGraphs WAR
-    (1985+) and Chadwick Bureau player ID crosswalk via the baseballr package.
+    2017-2025 from USA Today and Spotrac, supplements with FanGraphs WAR
+    (1985+) and Retrosheet postseason data (2022-2025), and provides Chadwick
+    Bureau player ID crosswalk via the baseballr package.
     No third-party data is bundled; all supplemental data is fetched at runtime.
 License: MIT + file LICENSE
 Encoding: UTF-8
@@ -27,6 +28,12 @@ Suggests:
     dm,
     jsonlite,
     re2,
+    zip,
     ggplot2,
+    ggrepel,
+    scales,
+    quarto,
+    knitr,
     testthat (>= 3.0.0)
+VignetteBuilder: quarto
 Config/testthat/edition: 3

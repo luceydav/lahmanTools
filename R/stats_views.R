@@ -62,7 +62,46 @@ create_stats_views <- function(con) {
   #   X2B, X3B  -- stored with R's prefix because "2B"/"3B" are invalid identifiers
   #   HBP, SF, SH -- nullable in early seasons; COALESCE to 0
   #   OBP denominator excludes SH (sacrifice bunts) per official MLB definition
-  DBI::dbExecute(con, "
+  #
+  # Extension: when FangraphsBattingWAR and ChadwickIDs are present, seasons
+  # after the last Lahman year (>2021) are filled from FanGraphs via UNION ALL.
+  # FG pre-computes AVG/OBP/SLG/ISO/BABIP/BB_pct/K_pct as proportions, matching
+  # the Lahman-derived values.  teamID and lgID are NULL for FG rows (FG uses
+  # internal team codes that don't map cleanly to Lahman identifiers).
+  tbls <- DBI::dbListTables(con)
+  has_fg <- all(c("FangraphsBattingWAR", "ChadwickIDs", "People") %in% tbls)
+
+  fg_union <- if (has_fg) "
+    UNION ALL
+    -- FanGraphs extension for seasons not covered by Lahman CSVs (>2021)
+    SELECT
+      p.playerID,
+      fw.Season::INTEGER                              AS yearID,
+      1                                               AS stint,
+      NULL::VARCHAR                                   AS teamID,
+      NULL::VARCHAR                                   AS lgID,
+      fw.G, fw.AB, fw.R, fw.H,
+      fw.\"2B\"::INTEGER                              AS X2B,
+      fw.\"3B\"::INTEGER                              AS X3B,
+      fw.HR, fw.RBI, fw.SB, fw.CS, fw.BB, fw.SO,
+      COALESCE(fw.IBB, 0)                             AS IBB,
+      COALESCE(fw.HBP, 0)                             AS HBP,
+      COALESCE(fw.SH,  0)                             AS SH,
+      COALESCE(fw.SF,  0)                             AS SF,
+      COALESCE(fw.GDP, 0)                             AS GIDP,
+      fw.PA,
+      fw.AVG, fw.OBP, fw.SLG,
+      fw.OBP + fw.SLG                                 AS OPS,
+      fw.ISO, fw.BABIP,
+      fw.BB_pct, fw.K_pct
+    FROM FangraphsBattingWAR fw
+    JOIN ChadwickIDs c ON fw.playerid::VARCHAR = c.key_fangraphs::VARCHAR
+    JOIN People p      ON c.key_bbref = p.bbrefID
+    WHERE fw.Season > 2021
+      AND fw.AB > 0
+  " else ""
+
+  DBI::dbExecute(con, paste0("
     CREATE OR REPLACE VIEW BattingStats AS
     SELECT
       playerID, yearID, stint, teamID, lgID,
@@ -112,8 +151,9 @@ create_stats_views <- function(con) {
         / NULLIF(AB + BB + COALESCE(HBP,0) + COALESCE(SF,0) + COALESCE(SH,0), 0)
                                                                     AS K_pct
     FROM Batting
-  ")
-  message(sprintf("  %-25s (view)", "BattingStats"))
+  ", fg_union))
+  src_note <- if (has_fg) " + FanGraphs (2022+)" else ""
+  message(sprintf("  %-25s (view, Lahman%s)", "BattingStats", src_note))
 
   # ── PitchingStats ────────────────────────────────────────────────────────────
   # IPouts = total outs recorded (IP * 3); use throughout to avoid /3 /3 chains.

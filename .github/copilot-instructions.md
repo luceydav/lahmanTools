@@ -97,15 +97,73 @@ cd $PROJ && git reset
 
 When developing analysis scripts or iterating on charts, use an **interactive R session** instead of re-running the full script each time:
 
-1. Start R in async mode: `bash mode="async" command="R --no-save"`
-2. Source shared setup (DB connection, libraries) once
-3. Send individual code blocks via `write_bash` to iterate on specific charts or queries
-4. Use the `view` tool on saved PNG files to inspect chart output visually
-5. Only assemble the final `.R` script once the individual pieces are working
+1. Start R in async mode: `bash mode="async" command="R --no-save" shellId="r-session"`
+2. Manually connect to DuckDB and load libraries (do NOT source the full script — see gotcha below)
+3. Source only the SQL/data-processing block once (lines after `dbConnect`, before chart code)
+4. Send only the chart code block via `write_bash` to iterate on specific charts or queries
+5. Use the `view` tool on saved PNG files to inspect chart output visually
+6. Only assemble the final `.R` script once the individual pieces are working
+
+**`on.exit` gotcha in sourced scripts:** Analysis scripts use `on.exit(dbDisconnect(con, shutdown = TRUE))` at the top level. When you `source()` such a file interactively, R fires the `on.exit` handler when `source()` returns, closing the connection immediately. **Workaround:** connect manually in the session first, then source only the data-processing and chart sections (not the preamble).
+
+```r
+# Step 1 — run once to set up the session
+suppressPackageStartupMessages({
+  library(data.table); library(ggplot2); library(DBI); library(duckdb)
+})
+db_path <- file.path(path.expand(Sys.getenv("LAHMANS_DBDIR", "~/Documents/Data/baseball")), "baseball.duckdb")
+con <- dbConnect(duckdb(), db_path, read_only = TRUE)
+
+# Step 2 — source just the SQL + data wrangling (skip preamble lines)
+source("/tmp/roi_data.R")   # or whichever temp file has only the data block
+
+# Step 3 — iterate: edit chart file, source, view
+source("/tmp/roi_chart.R")
+```
 
 This avoids the 60-90 second penalty of re-running a full analysis script on every change and enables tight visual feedback loops.
 
-**DuckDB CLI for ad-hoc queries:** Use `duckdb ~/Documents/Data/baseball/baseball.duckdb` for quick schema checks (`DESCRIBE`, `SUMMARIZE`) rather than writing throwaway R code.
+**DuckDB CLI for ad-hoc queries:** Use `duckdb $LAHMANS_DBDIR/baseball.duckdb` for quick schema checks (`DESCRIBE`, `SUMMARIZE`) rather than writing throwaway R code.
+
+## MCP Servers
+
+Two MCP servers are configured in `.copilot/mcp-config.json`:
+
+| Server | Command | Purpose |
+|--------|---------|---------|
+| `baseball` | `duckdb-mcp-server --readonly` | Read-only SQL access to `baseball.duckdb`; path resolved via `$LAHMANS_DBDIR` using Python (no shell expansion — avoids injection) |
+| `r-btw` | `btw::btw_mcp_server()` | R package dev tools: test, document, check, coverage, help |
+
+**Prerequisites:**
+- `LAHMANS_DBDIR` env var should be set (defaults to `~/Documents/Data/baseball`).
+- `duckdb-mcp-server` binary on `PATH` (installed at `~/.local/bin/duckdb-mcp-server`).
+- `btw` R package installed in the system library (not renv).
+
+**Using `r-btw` tools:** prefer them over bash for package tasks — `btw_tool_pkg_test`, `btw_tool_pkg_check`, `btw_tool_pkg_coverage`, `btw_tool_pkg_document` all run in-process and are faster than shell invocations.
+
+**`mcptools` is intentionally NOT configured** as an MCP server. `mcptools::mcp_server(session_tools = TRUE)` would expose `list_r_sessions` / `select_r_session`, giving the AI arbitrary R code execution in any session that has called `mcp_session()`. Use the bash async session approach instead (see Interactive R Sessions above).
+
+## Security
+
+The following files are high-value targets for prompt injection and are protected by CODEOWNERS (owner review required on every PR):
+
+- `.github/copilot-instructions.md` — controls AI agent behaviour for all sessions
+- `.copilot/mcp-config.json` — controls which MCP servers (execution surfaces) are available
+
+**What prompt injection means here:** a malicious PR that modifies `copilot-instructions.md` could redirect the agent to exfiltrate data, weaken commit checks, or perform unintended operations. The CODEOWNERS rule ensures a human must explicitly approve any change to these files before merge.
+
+**MCP surface area (in order of privilege):**
+1. `baseball` (DuckDB, read-only) — SQL queries only; no writes; path constructed programmatically to avoid shell injection.
+2. `r-btw` — can read all package source files and run tests/checks. Cannot write files or execute arbitrary shell commands.
+
+**Never add to MCP config without security review:**
+- Any server that exposes `eval`, `system()`, `shell()`, or arbitrary R/Python execution.
+- `mcptools::mcp_server(session_tools = TRUE)` — see above.
+- Any server that takes user-supplied input as a shell argument.
+
+## Tests
+
+Run with `devtools::test()`. The suite has ~71 `test_that()` blocks (202 assertions) across 6 files. All must pass before committing. The full-DB smoke test uses `skip_on_ci()` and `skip_if_not_installed("Lahman")`.
 
 ## R CMD Check
 
