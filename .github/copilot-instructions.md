@@ -21,6 +21,7 @@ ggplot charts saved via `ggsave()`:
 - **ggrepel tuning**: `min.segment.length = 0`, `seed = 42` (reproducibility), `max.overlaps = Inf`, `box.padding = 0.5`, `point.padding = 0.3`, `force = 2`. Increase `force`/`box.padding` when labels still overlap after `max.overlaps = Inf`.
 - **Quadrant charts**: always use `quad_setup()` from `chart_theme.R`. It computes explicit axis limits and corner positions. Pass `qs$xlim`/`qs$ylim` to `scale_x_*(limits=, expand=expansion(0))` — never omit `expand=expansion(0)` or labels drift inside the data cloud. Use `QUAD_LBL_SIZE` (3.5) for corner text size.
 - **Slide/chart subtitle rule — narrative only**: Subtitles tell the *why* (story, conclusion, significance). They must **never** restate what axis labels, quadrant corner text, legends, or other chart annotations already show. Before finalizing a subtitle, read every sentence and ask: "Does the chart already show this visually?" If yes, delete it. Keep only sentences that add information the chart's visual elements cannot convey.
+- **LinkedIn slide pattern**: Always use the Act 6 approach — `(p + li_theme() + coord_cartesian(clip = "off")) + labs(title = "Act N: ...", subtitle = "narrative")`. Chart scripts save both PNG and RDS (`saveRDS(p, sub(".png$", ".rds", out_file))`). `playoff_efficiency.R` loads via `readRDS(chart_path("name.rds"))`. Never use `li_wrap_png` for chart slides — it creates two text layers (slide title + chart title) that readers must parse twice.
 
 ## Project
 
