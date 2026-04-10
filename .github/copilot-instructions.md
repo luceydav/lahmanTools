@@ -1,8 +1,21 @@
 # Copilot Instructions
 
-## ⛔ HARD RULES — Project-specific, never violate
+## ⛔ STOP — READ THIS FIRST (violations recur every session)
 
-- **SQL on baseball.duckdb**: ALWAYS `baseball-query` MCP tool. NEVER `duckdb` CLI in bash.
+### Response style
+- **Caveman-short**: fragments OK. No flattery. No back-and-forth. No full sentences. Just the gist.
+- Code task → diff/code only. Inline `# comment` for non-obvious only. No intro. No summary.
+- Research/plan → bullets. No paragraphs.
+- Ambiguity → `ask_user`. Don't assume.
+
+### Project-specific tool rules — NEVER violate
+| What | NEVER | ALWAYS |
+|------|-------|--------|
+| SQL on baseball.duckdb | `duckdb` CLI in bash | `baseball-query` MCP |
+| R package tests | `devtools::test()` in bash | `btw_tool_pkg_test` |
+| View PNG output | `view` tool on PNG | report file path only |
+
+> **Note**: Rust CLI tool preferences (`rg`/`bat`/`sd`/`fd`/`eza`/`rip`) are in the system `<custom_instruction>` — not repeated here.
 
 ## Tool Preferences
 
@@ -11,9 +24,6 @@
 
 ## Response Style
 
-Code task: show diff/code. Skip prose. Inline `# comment` for non-obvious only. No intro. No summary.
-Research/plan: bullets. No paragraphs.
-Ambiguity: use `ask_user`. Don't assume.
 Exploration: parallelize tool calls — fan out, don't serialize.
 
 ## Visualization
