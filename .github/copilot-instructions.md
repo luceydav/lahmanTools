@@ -1,5 +1,15 @@
 # Copilot Instructions
 
+## ⛔ HARD RULES — Never violate, never forget
+
+- **Text search**: ALWAYS `rg` (ripgrep). NEVER `grep`, `find`, Python `re`, or any Python string loop.
+- **File search**: ALWAYS `fd`. NEVER `find` or `ls -r`.
+- **SQL on baseball.duckdb**: ALWAYS `baseball-query` MCP tool. NEVER `duckdb` CLI in bash.
+- **Response style**: Code task = code + inline comments only. Zero prose intro, zero summary, zero deliberation.
+- **Research/plan**: Bullets only. No paragraphs.
+- **PNG files**: NEVER call the `view` tool on PNG/image files. Report the saved path only.
+- **Python**: Only when no `rg`/`fd`/R/SQL equivalent exists. Never for text ops, file search, or data queries.
+
 ## Tool Preferences
 
 - **SQL**: use `baseball-query` MCP for ALL queries against `baseball.duckdb`. Never use `duckdb` CLI in bash.
