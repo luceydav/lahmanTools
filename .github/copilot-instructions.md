@@ -19,7 +19,7 @@ ggplot charts saved via `ggsave()`:
 - **Resolution**: `dpi = 300` (not 150). Current scripts use 150 — low for production output.
 - **Label sizing**: `LBL_SIZE = 2.9` in `chart_theme.R` is **mm units** (~8 pt). Multiply pt by 0.352778 to convert. Raise `theme_story(base = 13)` if output looks small after dpi change.
 - **ggrepel tuning**: `min.segment.length = 0`, `seed = 42` (reproducibility), `max.overlaps = Inf`, `box.padding = 0.5`, `point.padding = 0.3`, `force = 2`. Increase `force`/`box.padding` when labels still overlap after `max.overlaps = Inf`.
-- **Reference implementation**: `mva_quadrant.R` has the correct quadrant label positioning — use it as the model for acts 2 and 4.
+- **Quadrant charts**: always use `quad_setup()` from `chart_theme.R`. It computes explicit axis limits and corner positions. Pass `qs$xlim`/`qs$ylim` to `scale_x_*(limits=, expand=expansion(0))` — never omit `expand=expansion(0)` or labels drift inside the data cloud. Use `QUAD_LBL_SIZE` (3.5) for corner text size.
 
 ## Project
 
