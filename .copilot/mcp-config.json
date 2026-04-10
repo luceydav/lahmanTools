@@ -12,6 +12,11 @@
       "type": "stdio",
       "command": "Rscript",
       "args": ["-e", "btw::btw_mcp_server()"]
+    },
+    "context7": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@latest"]
     }
   }
 }

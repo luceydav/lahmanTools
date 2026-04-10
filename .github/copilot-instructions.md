@@ -1,5 +1,26 @@
 # Copilot Instructions
 
+## Tool Preferences
+
+- **SQL**: use `baseball-query` MCP for ALL queries against `baseball.duckdb`. Never use `duckdb` CLI in bash.
+- **GitHub**: prefer `gh` CLI in bash for routine ops (`pr list/view/create`, `issue view`, `push/pull`, `release`). Use `github-mcp-server` tools only for complex needs: cross-repo search, CI log analysis, artifact downloads.
+
+## Response Style
+
+Code task: show diff/code. Skip prose. Inline `# comment` for non-obvious only. No intro. No summary.
+Research/plan: bullets. No paragraphs.
+Ambiguity: use `ask_user`. Don't assume.
+Exploration: parallelize tool calls — fan out, don't serialize.
+
+## Visualization
+
+ggplot charts saved via `ggsave()`:
+- **Backend**: `ragg` is installed — always use `device = ragg::agg_png` for crisp text antialiasing.
+- **Resolution**: `dpi = 300` (not 150). Current scripts use 150 — low for production output.
+- **Label sizing**: `LBL_SIZE = 2.9` in `chart_theme.R` is **mm units** (~8 pt). Multiply pt by 0.352778 to convert. Raise `theme_story(base = 13)` if output looks small after dpi change.
+- **ggrepel tuning**: `min.segment.length = 0`, `seed = 42` (reproducibility), `max.overlaps = Inf`, `box.padding = 0.5`, `point.padding = 0.3`, `force = 2`. Increase `force`/`box.padding` when labels still overlap after `max.overlaps = Inf`.
+- **Reference implementation**: `mva_quadrant.R` has the correct quadrant label positioning — use it as the model for acts 2 and 4.
+
 ## Project
 
 `lahmanTools` is an R package for baseball sabermetric analysis. Stack: **DuckDB** (SQL engine) + **data.table** (R manipulation) + **base R** — no tidyverse. Analysis scripts live in `analysis/` (gitignored). `baseball.duckdb` is never committed; rebuild with `setup_baseball_db()`.
@@ -58,7 +79,7 @@ Introspect: `SHOW TABLES`, `DESCRIBE <tbl>`, `SUMMARIZE <tbl>`, `dm::dm_from_con
 
 - **`X2B` / `X3B`** — R renames the `2B`/`3B` columns when loading into DuckDB; always use `X2B`, `X3B` in SQL.
 - **`Salaries` only covers through 2016** — use `SalariesAll WHERE is_actual = TRUE` for any multi-era salary analysis.
-- **`Teams` covers through 2025** — used for era-adjusted FIP constants; teamID codes follow Lahman convention (e.g., CHN/CHA/KCA, not CHC/CHW/KC).
+- **`Teams` covers through 2021** — used for era-adjusted FIP constants; teamID codes follow Lahman convention (e.g., CHN/CHA/KCA, not CHC/CHW/KC). Use `ROW_NUMBER() OVER (PARTITION BY teamID ORDER BY yearID DESC)` to get latest lgID for years > 2021.
 - **`IPouts`** = outs recorded (IP × 3); `InnOuts` in `Fielding` is the same concept.
 - **Skip on load** — `LahmanData`, `battingLabels`, `fieldingLabels`, `pitchingLabels` are metadata, not data.
 
@@ -66,7 +87,7 @@ Introspect: `SHOW TABLES`, `DESCRIBE <tbl>`, `SUMMARIZE <tbl>`, `dm::dm_from_con
 
 - Most tests use `:memory:` DuckDB — fast, no file paths, CI-safe.
 - The full `setup_baseball_db()` smoke test uses `skip_on_ci()` and `skip_if_not_installed("Lahman")`.
-- Run with `devtools::test()`. All 72 tests must pass before committing.
+- Run with `devtools::test()`. The suite has ~71 `test_that()` blocks (202 assertions) across 6 files. All must pass before committing.
 
 ## Git Workaround (macOS sandbox)
 
@@ -101,7 +122,7 @@ When developing analysis scripts or iterating on charts, use an **interactive R 
 2. Manually connect to DuckDB and load libraries (do NOT source the full script — see gotcha below)
 3. Source only the SQL/data-processing block once (lines after `dbConnect`, before chart code)
 4. Send only the chart code block via `write_bash` to iterate on specific charts or queries
-5. Use the `view` tool on saved PNG files to inspect chart output visually
+5. Report the saved PNG file path to the user; do NOT call the `view` tool on PNG files.
 6. Only assemble the final `.R` script once the individual pieces are working
 
 **`on.exit` gotcha in sourced scripts:** Analysis scripts use `on.exit(dbDisconnect(con, shutdown = TRUE))` at the top level. When you `source()` such a file interactively, R fires the `on.exit` handler when `source()` returns, closing the connection immediately. **Workaround:** connect manually in the session first, then source only the data-processing and chart sections (not the preamble).
@@ -160,10 +181,6 @@ The following files are high-value targets for prompt injection and are protecte
 - Any server that exposes `eval`, `system()`, `shell()`, or arbitrary R/Python execution.
 - `mcptools::mcp_server(session_tools = TRUE)` — see above.
 - Any server that takes user-supplied input as a shell argument.
-
-## Tests
-
-Run with `devtools::test()`. The suite has ~71 `test_that()` blocks (202 assertions) across 6 files. All must pass before committing. The full-DB smoke test uses `skip_on_ci()` and `skip_if_not_installed("Lahman")`.
 
 ## R CMD Check
 
