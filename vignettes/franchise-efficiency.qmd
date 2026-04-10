@@ -78,7 +78,7 @@ Call `lahmanTools::load_retrosheet_post()` after `setup_baseball_db()` to add
 
 ```{r libs}
 #| message: false
-#| eval: !expr !is.na(Sys.getenv("LAHMANS_DBDIR", unset = NA))
+#| eval: !expr nzchar(Sys.getenv("LAHMANS_DBDIR", unset = ""))
 suppressPackageStartupMessages({
   library(data.table)
   library(ggplot2)
@@ -106,7 +106,7 @@ We use `franchID` throughout so that relocated/renamed franchises are tracked
 consistently (e.g., FLO → MIA, MON → WAS).
 
 ```{r fran-map}
-#| eval: !expr !is.na(Sys.getenv("LAHMANS_DBDIR", unset = NA))
+#| eval: !expr nzchar(Sys.getenv("LAHMANS_DBDIR", unset = ""))
 fran_map <- qry("
   SELECT DISTINCT t.teamID, t.franchID, tf.franchName
   FROM Teams t
@@ -147,7 +147,7 @@ Each playoff appearance is scored by how far the team advanced:
 Maximum possible = 15 (WC + DS + LCS + WS wins for a champion).
 
 ```{r playoff-scores}
-#| eval: !expr !is.na(Sys.getenv("LAHMANS_DBDIR", unset = NA))
+#| eval: !expr nzchar(Sys.getenv("LAHMANS_DBDIR", unset = ""))
 playoff_seasons <- qry("
   WITH all_teams AS (
     SELECT teamIDwinner AS teamID, yearID FROM SeriesPost
@@ -196,7 +196,7 @@ proxy of 0. This directly captures two important signals:
    into the playoffs score higher
 
 ```{r war-proxy}
-#| eval: !expr !is.na(Sys.getenv("LAHMANS_DBDIR", unset = NA))
+#| eval: !expr nzchar(Sys.getenv("LAHMANS_DBDIR", unset = ""))
 playoff_ty <- unique(playoff_seasons[, .(teamID, yearID)])
 
 rs_pa <- qry("
@@ -278,7 +278,7 @@ war_ret[, war_retention := fifelse(rs_war_total > 0,
 ## Stage 1: Getting to October
 
 ```{r stage1-data}
-#| eval: !expr !is.na(Sys.getenv("LAHMANS_DBDIR", unset = NA))
+#| eval: !expr nzchar(Sys.getenv("LAHMANS_DBDIR", unset = ""))
 fa_cost <- qry("
   SELECT t.franchID,
     MEDIAN(sp.dollars_per_war / 1e6) AS fa_m_per_war,
@@ -377,7 +377,7 @@ stage1 <- stage1[!is.na(short)]
 ```
 
 ```{r chart-stage1}
-#| eval: !expr !is.na(Sys.getenv("LAHMANS_DBDIR", unset = NA))
+#| eval: !expr nzchar(Sys.getenv("LAHMANS_DBDIR", unset = ""))
 #| fig-cap: "Stage 1: efficient franchises appear in the upper-left (low $/WAR, high playoff rate). Bubble size = dead-money burden; blue fill = strong homegrown pipeline."
 ggplot(stage1, aes(fa_m_per_war, playoff_rate * 100)) +
   geom_point(aes(size = dead_pct, fill = hg_war_pct),
@@ -407,7 +407,7 @@ ggplot(stage1, aes(fa_m_per_war, playoff_rate * 100)) +
 ## Stage 2: Going Deep
 
 ```{r stage2-data}
-#| eval: !expr !is.na(Sys.getenv("LAHMANS_DBDIR", unset = NA))
+#| eval: !expr nzchar(Sys.getenv("LAHMANS_DBDIR", unset = ""))
 team_rs_war <- qry("
   WITH player_pa AS (
     SELECT playerID, yearID, teamID,
@@ -456,7 +456,7 @@ setorder(stage2, -avg_achievement)
 ```
 
 ```{r chart-stage2}
-#| eval: !expr !is.na(Sys.getenv("LAHMANS_DBDIR", unset = NA))
+#| eval: !expr nzchar(Sys.getenv("LAHMANS_DBDIR", unset = ""))
 #| fig-cap: "Stage 2: x-axis reversed so stronger RS WAR teams are on the right. Colour shows WAR retention -- how much of that regular-season talent materialised in October."
 stage2_plot <- stage2[n_playoffs >= 5]
 stage2_plot[, label := short]
@@ -506,7 +506,7 @@ their Overall mean to a middling position. High achievement came at high cost.
 :::
 
 ```{r scorecard}
-#| eval: !expr !is.na(Sys.getenv("LAHMANS_DBDIR", unset = NA))
+#| eval: !expr nzchar(Sys.getenv("LAHMANS_DBDIR", unset = ""))
 #| fig-height: 9
 #| fig-cap: "Rows sorted by OVERALL = mean of 5 dimension percentile ranks. The rightmost column shows that overall rank. Red = bottom of league; Blue = top."
 syn <- Reduce(
@@ -592,7 +592,7 @@ ggplot(syn_long, aes(metric_label, short_f, fill = pct)) +
 ## Cleanup
 
 ```{r cleanup}
-#| eval: !expr !is.na(Sys.getenv("LAHMANS_DBDIR", unset = NA))
+#| eval: !expr nzchar(Sys.getenv("LAHMANS_DBDIR", unset = ""))
 DBI::dbDisconnect(con, shutdown = TRUE)
 ```
 
